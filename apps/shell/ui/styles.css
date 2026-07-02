@@ -1,0 +1,408 @@
+/* styles.css —— 暗色简洁；不引 UI 框架（M1 只求可用可调） */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* 为什么透明：宠物窗是 NSPanel 透明置顶，面板窗由 data-route 补深色底 */
+  background: transparent;
+  color: #e6e6ef;
+  font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
+  font-size: 14px;
+}
+
+body[data-route='panel'] {
+  background: #14141b;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: #262633;
+  border: 1px solid #3a3a4c;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #32324a;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: #1d1d28;
+  border: 1px solid #3a3a4c;
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #6c6cf5;
+}
+
+/* ---------- 宠物窗口 ---------- */
+
+.pet-window {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.sprite {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid transparent;
+  animation: breathe 3.2s ease-in-out infinite; /* 待机呼吸 */
+}
+
+.sprite-face {
+  font-size: 56px;
+  line-height: 1;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* 六态色块：正式美术 M2 替换 */
+.sprite--happy {
+  background: rgba(249, 168, 37, 0.28);
+  border-color: #f9a825;
+}
+.sprite--angry {
+  background: rgba(229, 57, 53, 0.28);
+  border-color: #e53935;
+}
+.sprite--sad {
+  background: rgba(92, 107, 192, 0.28);
+  border-color: #5c6bc0;
+}
+.sprite--anxious {
+  background: rgba(255, 112, 67, 0.28);
+  border-color: #ff7043;
+}
+.sprite--calm {
+  background: rgba(77, 182, 172, 0.28);
+  border-color: #4db6ac;
+}
+.sprite--unknown {
+  background: rgba(120, 144, 156, 0.28);
+  border-color: #78909c;
+}
+
+.pet-menu {
+  display: flex;
+  gap: 6px;
+  background: rgba(24, 24, 33, 0.92);
+  border: 1px solid #3a3a4c;
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.pet-menu button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* ---------- 气泡 ---------- */
+
+.bubble {
+  max-width: 240px;
+  background: rgba(24, 24, 33, 0.94);
+  border: 1px solid #3a3a4c;
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.bubble-actions button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* kind 样式区分（§3.1 BubbleKind） */
+.bubble--reply {
+  border-left-color: #4db6ac;
+}
+.bubble--proactive {
+  border-left-color: #ba68c8;
+}
+.bubble--task {
+  border-left-color: #4fc3f7;
+}
+.bubble--reminder {
+  border-left-color: #ffd54f;
+}
+.bubble--approval {
+  border-left-color: #ff8a65;
+}
+
+/* ---------- 面板 ---------- */
+
+.panel {
+  display: flex;
+  height: 100vh;
+}
+
+.panel--login {
+  align-items: center;
+  justify-content: center;
+}
+
+.panel-nav {
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  border-right: 1px solid #26263a;
+}
+
+.panel-nav button {
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #a5a5bd;
+}
+
+.panel-nav button:hover {
+  background: #22222f;
+}
+
+.panel-nav button.active {
+  background: #2c2c44;
+  color: #fff;
+}
+
+.panel-user {
+  margin-top: auto;
+  font-size: 11px;
+  color: #6d6d85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-main {
+  flex: 1;
+  overflow: hidden;
+}
+
+.placeholder {
+  padding: 24px;
+  color: #8a8aa3;
+}
+
+/* ---------- 聊天 ---------- */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 76%;
+}
+
+.chat-msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat-bubble {
+  background: #22222f;
+  border-radius: 12px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-msg--user .chat-bubble {
+  background: #3d3d68;
+}
+
+.chat-msg--error .chat-bubble {
+  background: rgba(229, 57, 53, 0.16);
+  border: 1px solid #e53935;
+  color: #ff9e9b;
+}
+
+.chat-tooling {
+  font-size: 12px;
+  color: #7d7d95;
+  margin-top: 3px;
+}
+
+.chat-cursor {
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #26263a;
+}
+
+.chat-input input {
+  flex: 1;
+}
+
+/* ---------- 登录 ---------- */
+
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 300px;
+  text-align: center;
+}
+
+.login-face {
+  font-size: 56px;
+}
+
+.login h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.login-hint {
+  color: #8a8aa3;
+  margin: 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.login-err {
+  color: #ff9e9b;
+  margin: 0;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: #8a8aa3;
+  text-decoration: underline;
+}
+
+/* ---------- 设置 ---------- */
+
+.settings {
+  padding: 20px 24px;
+  max-width: 520px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.settings h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field > span {
+  color: #a5a5bd;
+  font-size: 13px;
+}
+
+.field--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field input.narrow {
+  width: 80px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+button.danger {
+  border-color: #7a3038;
+  color: #ff9e9b;
+}
+
+.settings-note {
+  color: #8a8aa3;
+}
