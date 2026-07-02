@@ -1,0 +1,20 @@
+{
+  "name": "petsona-desktop",
+  "private": true,
+  "version": "3.0.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "pnpm -r --filter './packages/**' --filter './apps/gateway' build",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:e2e": "vitest run tests/e2e",
+    "test:compliance": "vitest run tests/compliance",
+    "dev:gateway": "pnpm --filter @petsona/gateway dev",
+    "dev:harness": "pnpm --filter @petsona/harness dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
