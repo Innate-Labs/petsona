@@ -59,4 +59,5 @@
 
 1. M3 开工：调度 tick、主动心跳（p01/p02）、全屏静默、记忆 Dream、记忆管理页。
 2. screen_qa 的本地 OCR 命令行封装（macOS Vision）。
-3. 把真机验收步骤沉淀为可重复脚本（scripts/probe-dispatch 已有雏形，在会话 scratchpad，可迁入 repo）。
+
+审批闭环回归可用 `node scripts/probe-dispatch.mjs`（起网关后 15 秒内应打印 `TASK_EVENT awaiting_approval`）。

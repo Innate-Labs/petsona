@@ -47,7 +47,7 @@ cd apps/shell && pnpm tauri:dev  # 桌面 App（需 source ~/.cargo/env）
 pnpm --filter @petsona/shell dev # 只调 UI：浏览器 :5173，内置 mock 总线
 ```
 
-当前机器若默认 `node -v` 是 26.x，跑测试/构建/tauri dev 需改用 Node 22（例如 `npx -y -p node@22 node ...`）；`better-sqlite3@11.10.0` 的 native binding 与 Node 26 不兼容。
+Node 用 22.x（`better-sqlite3@11.10.0` native binding 与 Node 26 ABI 不兼容；机器默认是 26 时可 `npx -y -p node@22 node ...`）。
 
 测试环境变量：`PETSONA_KEYCHAIN=memory`（免弹钥匙串）、`PETSONA_DATA_DIR=<tmp>`（隔离数据）、`PETSONA_GATEWAY_URL`。
 harness 其他 env：`PETSONA_HARNESS_CMD`（壳 spawn sidecar 的覆盖命令）、`PETSONA_ASSETS_DIR`、`PETSONA_LOG_LEVEL=debug`（res 附 hookTrace）。
