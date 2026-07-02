@@ -1,0 +1,24 @@
+# 壳层：渲染与系统 API 代理，不含业务逻辑（v3.0 §1）
+[package]
+name = "petsona-shell"
+version = "3.0.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# NSPanel 桥（nonactivating 透明置顶宠物窗口）
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.24"      # CGEventSource 空闲时间（SYS_IDLE_STATE）
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSApplication", "NSScreen", "NSWorkspace", "NSRunningApplication"] }
+
+[profile.dev]
+incremental = true
