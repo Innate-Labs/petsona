@@ -62,7 +62,7 @@ LLM_CHEAP_MODEL=deepseek-chat
 ## 测试
 
 ```bash
-pnpm test        # 全量：11 文件 72 用例（结构性约束/工具契约/合规/Gate）
+pnpm test        # 全量：12 文件 72 用例（结构性约束/工具契约/合规/Gate）
 ```
 
 - **结构性约束（§10）**：companion 禁注册重工具、builtin L3 不可降级、harness 网络出口唯一、vendor SDK 隔离、token 禁落盘
