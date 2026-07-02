@@ -23,11 +23,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .build()?;
 
     // 初始位置：主屏右下角（PET_MOVED 的持久化位置恢复 M1 后补，SPEC-GAP）
+    // monitor.size() 是物理像素，窗口尺寸/边距按逻辑点算——必须除以 scale，否则 Retina 上偏出屏幕
     if let Some(monitor) = win.primary_monitor()? {
-        let size = monitor.size();
-        let _ = win.set_position(tauri::PhysicalPosition::new(
-            size.width as i32 - 260,
-            size.height as i32 - 320,
+        let logical = monitor.size().to_logical::<f64>(monitor.scale_factor());
+        let _ = win.set_position(tauri::LogicalPosition::new(
+            logical.width - 260.0,
+            logical.height - 320.0,
         ));
     }
 
