@@ -26,6 +26,13 @@
 | H8 | tools/light read_context | M1 无窗口标题/选中文字（需 AX API） | 前台 App 名 + 剪贴板（<data> 包裹） | M2 屏幕问答一并交付（已在计划内） |
 | H9 | tools/light schedule_reminder | 各 kind 默认 cron 未给 | water 每小时、stand 45min、pomodoro 25min | 规格 §3.8 补默认 cron 表 |
 | H10 | main.ts 匿名→登录迁移 | M1 登录仅切换鉴权态，未做 anon 目录迁移 | 数据仍在 anon-<deviceId> 目录 | §2.3 迁移流程 M2 落地时对齐 §3.6 云同步 |
+| H11 ⭐ | tools/heavy shell | 任意 shell 命令如何进入 staging 未定义 | `shell` 即时执行，只走 scope/permission/audit 与 builtin L3；文件类重工具单独 staging | 规格 §3.5/§3.6 补命令级审批或限定 shell 用途 |
+| H12 | tools/heavy web_fetch | harness 不能直接出网，gateway 代理协议规格未定义 | 已实现 `POST /v1/proxy/fetch`（鉴权+SSRF 拦内网+10s 超时+字节上限），返回文本经 `<data>` 包裹入上下文 | 规格 §3.6 收录该协议定义 |
+| H13 | staging/store.ts | undo journal 保留/归档后台未定义 | 按 `UNDO_RETENTION_DAYS=7` 类型常量写 journal，不做自动清理 | 规格 §3.4 补归档触发与失败处理 |
+| H14 | shared/ipc.ts AUTH_STATE_GET | §3 消息表无登录态拉取 req；仅广播在真机有「广播早于面板订阅」竞态 | 新增 `AUTH_STATE_GET` req 返回当前 authState，面板挂载时拉取兜底 | 规格 §3.1 消息表收录 |
+| H15 | routes/proxy.ts | 单测需在环回地址自起 http 服务验证真实抓取，与 SSRF 拦截冲突 | 环境变量 `PETSONA_PROXY_ALLOW_LOOPBACK=1` 测试专用逃生口 | 规格 §8 测试口径收录或改用可配置 allowlist |
+| H16 | skills/screen_qa | 本地 OCR 命令行封装未定义（macOS Vision 无官方 CLI） | SKILL.md 允许退化：截图落任务目录+findings 说明无法 OCR | M3 前交付 OCR 封装（Vision framework 或 shortcuts） |
+| H17 | lib.rs open_panel | 面板深链 hash 规则规格未写 | 统一 `#/panel[/<page>]`，open_panel 负责补前缀；首建窗口 URL 也带子页 | 规格 §4 面板路由表收录 |
 
 ## apps/gateway
 
