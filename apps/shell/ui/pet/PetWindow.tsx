@@ -74,7 +74,8 @@ export function PetWindow() {
     setMenuOpen(false)
     const payload: PetPositionPayload = { position: { x: e.screenX, y: e.screenY } }
     send(IPC.PET_CLICKED, payload)
-    if (isTauri()) void invoke('open_panel', { route })
+    if (isTauri() && route === 'chat') void invoke('open_float_chat')
+    else if (isTauri()) void invoke('open_panel', { route })
     else window.location.hash = `#/panel/${route}` // 浏览器降级：同窗切到面板路由
   }
 

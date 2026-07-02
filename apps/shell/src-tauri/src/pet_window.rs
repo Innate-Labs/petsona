@@ -1,6 +1,8 @@
 // 悬浮宠物窗口：NSPanel nonactivating + 透明 + 置顶 + 可拖（§2.1 硬约束，objc 桥经 tauri-nspanel）
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf, sync::Arc};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
 use tauri_nspanel::WebviewWindowExt;
 
@@ -8,6 +10,14 @@ use tauri_nspanel::WebviewWindowExt;
 const NONACTIVATING_PANEL: i32 = 1 << 7;
 // NSMainMenuWindowLevel + 1：压过普通窗口，低于系统弹层
 const PANEL_LEVEL: i32 = 25;
+// SPEC-GAP: 规格只定义 PET_MOVED 消息，未定义壳层窗口位置存储位置；先落 Tauri app data。
+const PET_WINDOW_STATE_FILE: &str = "pet-window.json";
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+struct PetWindowState {
+    x: i32,
+    y: i32,
+}
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let win = WebviewWindowBuilder::new(app, "pet", WebviewUrl::App("index.html#/pet".into()))
@@ -22,15 +32,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .accept_first_mouse(true)
         .build()?;
 
-    // 初始位置：主屏右下角（PET_MOVED 的持久化位置恢复 M1 后补，SPEC-GAP）
-    // monitor.size() 是物理像素，窗口尺寸/边距按逻辑点算——必须除以 scale，否则 Retina 上偏出屏幕
-    if let Some(monitor) = win.primary_monitor()? {
-        let logical = monitor.size().to_logical::<f64>(monitor.scale_factor());
-        let _ = win.set_position(tauri::LogicalPosition::new(
-            logical.width - 260.0,
-            logical.height - 320.0,
-        ));
-    }
+    place_pet_window(app, &win)?;
+    watch_pet_position(app, &win);
 
     // 转 NSPanel：nonactivating + 全空间跟随；不加 FullScreenAuxiliary → 全屏 App 时自动不可见（§4 约束）
     match win.to_panel() {
@@ -59,4 +62,76 @@ pub fn toggle(app: &AppHandle) {
         let visible = win.is_visible().unwrap_or(false);
         if visible { let _ = win.hide(); } else { let _ = win.show(); }
     }
+}
+
+fn place_pet_window(app: &AppHandle, win: &tauri::WebviewWindow) -> tauri::Result<()> {
+    if let Some(state) = read_pet_window_state(app) {
+        let monitors = win.available_monitors()?;
+        if monitors.iter().any(|monitor| state_on_monitor(state, monitor)) {
+            let _ = win.set_position(tauri::PhysicalPosition::new(state.x, state.y));
+            return Ok(());
+        }
+    }
+
+    // 默认右下角：monitor.size() 是物理像素，窗口尺寸/边距按逻辑点算——必须除以 scale，否则 Retina 上偏出屏幕
+    if let Some(monitor) = win.primary_monitor()? {
+        let logical = monitor.size().to_logical::<f64>(monitor.scale_factor());
+        let _ = win.set_position(tauri::LogicalPosition::new(
+            logical.width - 260.0,
+            logical.height - 320.0,
+        ));
+    }
+    Ok(())
+}
+
+fn watch_pet_position(app: &AppHandle, win: &tauri::WebviewWindow) {
+    let app = app.clone();
+    let state_path = Arc::new(pet_window_state_path(&app));
+    win.on_window_event(move |event| {
+        if let WindowEvent::Moved(position) = event {
+            write_pet_window_state(&state_path, PetWindowState { x: position.x, y: position.y });
+        }
+    });
+}
+
+fn read_pet_window_state(app: &AppHandle) -> Option<PetWindowState> {
+    let path = pet_window_state_path(app);
+    let raw = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+fn write_pet_window_state(path: &PathBuf, state: PetWindowState) {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            log::warn!("[pet_window] 创建状态目录失败: {e}");
+            return;
+        }
+    }
+    match serde_json::to_vec_pretty(&state) {
+        Ok(bytes) => {
+            if let Err(e) = fs::write(path, bytes) {
+                log::warn!("[pet_window] 保存窗口位置失败: {e}");
+            }
+        }
+        Err(e) => log::warn!("[pet_window] 序列化窗口位置失败: {e}"),
+    }
+}
+
+fn pet_window_state_path(app: &AppHandle) -> PathBuf {
+    app
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir().join("Petsona"))
+        .join(PET_WINDOW_STATE_FILE)
+}
+
+fn state_on_monitor(state: PetWindowState, monitor: &tauri::Monitor) -> bool {
+    let origin = monitor.position();
+    let size = monitor.size();
+    let x = state.x;
+    let y = state.y;
+    x >= origin.x
+        && y >= origin.y
+        && x < origin.x + size.width as i32
+        && y < origin.y + size.height as i32
 }

@@ -8,6 +8,10 @@ mod tray;
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
+const FLOAT_WIDTH: f64 = 300.0;
+const FLOAT_HEIGHT: f64 = 425.0;
+const FLOAT_GAP: f64 = 12.0;
+
 /// 打开/聚焦面板窗口（宠物菜单与托盘共用）
 #[tauri::command]
 fn open_panel(app: AppHandle, route: Option<String>) {
@@ -26,6 +30,41 @@ fn open_panel(app: AppHandle, route: Option<String>) {
         .build();
 }
 
+/// 打开宠物旁快捷聊天浮窗（复用 #/float 路由）
+#[tauri::command]
+fn open_float_chat(app: AppHandle) {
+    let label = "float";
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+
+    let Ok(win) = WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html#/float".into()))
+        .title("宠格快捷聊天")
+        .inner_size(FLOAT_WIDTH, FLOAT_HEIGHT)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .accept_first_mouse(true)
+        .build()
+    else {
+        return;
+    };
+    place_float_chat(&app, &win);
+    let _ = win.set_focus();
+}
+
+#[tauri::command]
+fn close_float_chat(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("float") {
+        let _ = win.hide();
+    }
+}
+
 pub(crate) fn show_panel(app: &AppHandle, route: &str) {
     open_panel(app.clone(), Some(route.to_string()));
 }
@@ -39,7 +78,12 @@ pub fn run() {
         }))
         .plugin(tauri_nspanel::init())
         .manage(bridge::SidecarState::default())
-        .invoke_handler(tauri::generate_handler![bridge::ipc_send, open_panel])
+        .invoke_handler(tauri::generate_handler![
+            bridge::ipc_send,
+            open_panel,
+            open_float_chat,
+            close_float_chat
+        ])
         .setup(|app| {
             bridge::spawn_sidecar(app.handle().clone());
             pet_window::create(app.handle())?;
@@ -50,4 +94,50 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("petsona shell 启动失败");
+}
+
+fn place_float_chat(app: &AppHandle, win: &tauri::WebviewWindow) {
+    if let Some(pet) = app.get_webview_window("pet") {
+        if let (Ok(pet_pos), Ok(Some(monitor))) = (pet.outer_position(), pet.current_monitor()) {
+            let scale = monitor.scale_factor();
+            let float_w = (FLOAT_WIDTH * scale).round() as i32;
+            let float_h = (FLOAT_HEIGHT * scale).round() as i32;
+            let gap = (FLOAT_GAP * scale).round() as i32;
+            let pet_w = (180.0 * scale).round() as i32;
+            let monitor_pos = monitor.position();
+            let monitor_size = monitor.size();
+            let right_x = pet_pos.x + pet_w + gap;
+            let left_x = pet_pos.x - float_w - gap;
+            let x = if right_x + float_w <= monitor_pos.x + monitor_size.width as i32 {
+                right_x
+            } else {
+                left_x
+            };
+            let y = pet_pos.y - ((FLOAT_HEIGHT - 200.0) * scale / 2.0).round() as i32;
+            let _ = win.set_position(tauri::PhysicalPosition::new(
+                clamp_i32(x, monitor_pos.x, monitor_pos.x + monitor_size.width as i32 - float_w),
+                clamp_i32(y, monitor_pos.y, monitor_pos.y + monitor_size.height as i32 - float_h),
+            ));
+            return;
+        }
+    }
+
+    if let Ok(Some(monitor)) = win.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let float_w = (FLOAT_WIDTH * scale).round() as i32;
+        let float_h = (FLOAT_HEIGHT * scale).round() as i32;
+        let pos = monitor.position();
+        let size = monitor.size();
+        let _ = win.set_position(tauri::PhysicalPosition::new(
+            pos.x + size.width as i32 - float_w - (24.0 * scale).round() as i32,
+            pos.y + size.height as i32 - float_h - (64.0 * scale).round() as i32,
+        ));
+    }
+}
+
+fn clamp_i32(value: i32, min: i32, max: i32) -> i32 {
+    if max < min {
+        return min;
+    }
+    value.max(min).min(max)
 }

@@ -1,6 +1,5 @@
 // float/FloatChat.tsx —— 对话浮窗（Figma Group12/54：300×425）：宠物旁快捷聊天
-// SPEC-GAP: 真机应为独立 NSPanel 小窗（壳侧开窗待补），M1 先作 #/float 路由供
-// 浏览器原型演示与后续壳接入复用。
+// 浏览器原型与 Tauri 独立小窗共用同一路由。
 
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -29,7 +28,8 @@ export function FloatChat() {
   }
 
   const close = () => {
-    if (!isTauri()) window.location.hash = '#/pet' // 浏览器原型回宠物视图
+    if (isTauri()) void invoke('close_float_chat')
+    else window.location.hash = '#/pet' // 浏览器原型回宠物视图
   }
 
   return (

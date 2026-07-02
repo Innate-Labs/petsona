@@ -60,5 +60,5 @@ WKWebView，WebKit 不支持 VP9/VP8 alpha（黑底或不解码，Sprite 已做 
 - 面板 IA：首页 2×2 直达四页；审批/记忆不在 Figma 稿 → 设置中心内链 + 深链 #/panel/approval|memory 保留（Gate 流程不破坏）。tasks 深链并入提醒事项页 Todo 区。
 - 宠物数据页数据源 harness 无此域 → localStorage 暂存 + SPEC-GAP（应入 $DATA，M2 harness 补）。
 - 对话记录页 M1 无多会话 → 现渲染实时线程（Figma 气泡样式）；会话列表待 M2。
-- 对话浮窗做成 #/float 路由（浏览器原型可跳转演示）；真机独立 NSPanel 窗待补（SPEC-GAP）。
+- 对话浮窗复用 #/float 路由；真机由壳打开独立置顶无边框小窗，贴近宠物定位并保留输入焦点。未做 non-activating NSPanel：聊天框需要稳定接收键盘输入。
 - 主面板窗建议尺寸 380×640 逻辑点（原 920×640），改 shell 时机等后台 agent 完工避免冲突。

@@ -49,7 +49,7 @@
 |---|---|---|---|---|
 | P1 ⭐ | bridge.rs | sidecar 二进制打包流程未做 | dev 用 `node packages/harness/dist/main.js`（PETSONA_HARNESS_CMD 可覆盖） | 发布流程补 Node SEA/pkg 打包与签名 |
 | P2 | macos/idle.rs | 全屏检测需 CGWindowList 遍历 | M1 恒 false | M3 fullscreenMute 落地时实现 |
-| P3 | pet_window.rs | PET_MOVED 位置持久化恢复未做 | 每次启动右下角 | M1 后补（壳本地存储） |
+| P3 | pet_window.rs | 规格未定义 PET_MOVED 后的壳层位置存储位置 | Tauri app data 写 `pet-window.json`，启动优先恢复；坐标越界则回右下角 | §4 补充宠物窗位置恢复策略与存储位置 |
 | P4 | pet_window.rs | NSPanel 桥失败降级为普通置顶窗口 | 已编译通过，降级仅为兜底 | 无需回填，保留兜底 |
 | P5 | icons/ | 正式图标未交付（美术任务，本轮排除） | 生成的占位 PNG | 美术 A 按 v3.0 A.4 交付 |
 
