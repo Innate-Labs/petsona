@@ -35,7 +35,14 @@ import { join } from 'node:path'
 const startedAt = Date.now()
 
 export function createHarness(emitLine: (line: string) => void) {
-  const emit = (e: { type: string; payload: unknown }) => emitLine(encodeLine(makeEvent(e.type, e.payload)))
+  const emit = (e: { type: string; payload: unknown }) => {
+    // set_emotion 工具向外发信号时，harness 内部情绪镜像同步更新（persona EMOTION_STATE 段依赖）
+    if (e.type === IPC.PET_EMOTION_SIGNAL) {
+      const p = e.payload as { state?: Emotion; cause?: string }
+      if (p?.state) { emotion = p.state; emotionCause = p.cause ?? '' }
+    }
+    emitLine(encodeLine(makeEvent(e.type, e.payload)))
+  }
 
   // ---- 状态与存储 ----
   const userId = anonUserId()                     // 登录后迁移目录（§2.3）——M1 匿名目录起步，登录仅切换鉴权态
