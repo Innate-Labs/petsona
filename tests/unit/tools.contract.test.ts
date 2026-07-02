@@ -14,7 +14,8 @@ import { LocalMemoryStore } from '../../packages/harness/src/memory/store.js'
 import { GatewayClient } from '../../packages/harness/src/gateway/client.js'
 import { SkillLoader } from '../../packages/harness/src/skills/loader.js'
 import { makePersistLargeHook } from '../../packages/harness/src/hooks/pre/tooluse.js'
-import { LIGHT_TOOLS } from '@petsona/shared'
+import { DEFAULT_CONFIG, IPC, LIGHT_TOOLS } from '@petsona/shared'
+import { TaskBoard } from '../../packages/harness/src/tasks/board.js'
 
 // §3.6 轻工具默认级契约
 const EXPECTED_LEVELS: Record<string, string> = {
@@ -33,11 +34,17 @@ beforeAll(() => {
   const cold = new ColdFs(paths.coldDir, paths.memoryIndex)
   const gateway = new GatewayClient('http://127.0.0.1:1')   // 不可达：工具不应依赖网络
   const store = new LocalMemoryStore(db, cold, gateway)
+  const taskBoard = new TaskBoard({
+    tasksDir: paths.tasksDir,
+    getConfig: () => DEFAULT_CONFIG,
+    emit: (e) => events.push(e),
+  })
   reg = new ToolRegistry('companion')
   registerLightTools(reg, {
     store,
     skills: new SkillLoader(paths.skills),
     paths,
+    taskBoard,
     emit: (e) => events.push(e),
     sysState: { accessibility: false },
   })
@@ -93,11 +100,15 @@ describe('轻工具行为契约', () => {
     expect(jobs.some((j: any) => j.id === out.jobId)).toBe(true)
   })
 
-  it('dispatch_task M1 返回占位「M2 才会干活喵」', async () => {
+  it('dispatch_task 派发任务、落盘并广播 TASK_EVENT', async () => {
+    events = []
     const out = (await reg.get('dispatch_task')!.handler(
       { goal: '整理下载', agentType: 'worker', scope: { dirs: ['~/Downloads'], net: false } }, ctx() as any,
-    )) as { note: string }
-    expect(out.note).toBe('M2 才会干活喵')
+    )) as { taskId: string; status: string }
+    expect(out.taskId).toMatch(/^task_/)
+    expect(out.status).toBe('queued')
+    expect(existsSync(join(paths.tasksDir, `${out.taskId}.json`))).toBe(true)
+    expect(events.some((e) => e.type === IPC.TASK_EVENT && (e.payload as any).t === 'created')).toBe(true)
   })
 
   it('check_task 未知任务 → found:false（不抛错）', async () => {

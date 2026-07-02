@@ -10,6 +10,7 @@ import { registerAuthRoutes } from './routes/auth.js'
 import { registerLlmRoutes } from './routes/llm.js'
 import { registerMemoryRoutes } from './routes/memory.js'
 import { registerTrackRoutes } from './routes/track.js'
+import { registerProxyRoutes } from './routes/proxy.js'
 
 // 版本比较：只比 major.minor.patch 数字段（SPEC-GAP: 规格未定预发布号规则，忽略 -beta 等后缀）
 function versionLower(a: string, b: string): boolean {
@@ -48,6 +49,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   registerLlmRoutes(app)
   registerMemoryRoutes(app)
   registerTrackRoutes(app)
+  registerProxyRoutes(app)
 
   return app
 }

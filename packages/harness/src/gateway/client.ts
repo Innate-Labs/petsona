@@ -73,9 +73,12 @@ export class GatewayClient {
   }
 
   async submitCode(email: string, code: string): Promise<AuthTokens & { email: string }> {
-    const res = await this.postJson<AuthTokens & { email: string }>('/v1/auth/verify-code', { email, code })
+    // 网关路由是 /v1/auth/login（继承 v2.1 §3.3.4），email 在 user 里而非顶层
+    const res = await this.postJson<AuthTokens & { user: { id: string; email: string } }>(
+      '/v1/auth/login', { email, code },
+    )
     await this.saveTokens(res)
-    return res
+    return { ...res, email: res.user?.email ?? email }
   }
 
   async refresh(): Promise<boolean> {
@@ -113,6 +116,15 @@ export class GatewayClient {
         body: JSON.stringify({ ...req, stream: true }),
         signal: ctrl.signal,
       })
+      // access TTL 15m，长会话必然过期：401 先拿 refresh 换新再重试一次
+      if (response.status === 401 && (await this.refresh())) {
+        response = await fetch(`${this.baseUrl}/v1/llm/chat`, {
+          method: 'POST',
+          headers: this.headers(),
+          body: JSON.stringify({ ...req, stream: true }),
+          signal: ctrl.signal,
+        })
+      }
     } catch (err) {
       clearTimeout(timer)
       const code = ctrl.signal.aborted ? 'TIMEOUT' : 'UPSTREAM'
@@ -184,9 +196,22 @@ export class GatewayClient {
     await this.postJson('/v1/track/batch', { events })
   }
 
+  // ---------- POST /v1/proxy/fetch（web_fetch 网关代理，缝①唯一联网出口） ----------
+
+  async proxyFetch(url: string, maxBytes?: number): Promise<{
+    ok: boolean
+    status: number
+    contentType: string
+    finalUrl: string
+    truncated: boolean
+    text: string
+  }> {
+    return this.postJson('/v1/proxy/fetch', { url, maxBytes })
+  }
+
   // ---------- 内部 ----------
 
-  private async postJson<T>(path: string, body: unknown): Promise<T> {
+  private async postJson<T>(path: string, body: unknown, retried = false): Promise<T> {
     let response: Response
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
@@ -197,7 +222,14 @@ export class GatewayClient {
     } catch (err) {
       throw new GatewayError('UPSTREAM', `网关不可达: ${err instanceof Error ? err.message : err}`)
     }
-    if (response.status === 401) throw new GatewayError('UNAUTHENTICATED', '未登录或 token 过期')
+    if (response.status === 401) {
+      // access TTL 15m，长会话必然过期：401 自动 refresh 后重试一次；
+      // /v1/auth/* 排除以免 refresh 自身 401 时递归
+      if (!retried && !path.startsWith('/v1/auth/') && this.refreshToken) {
+        if (await this.refresh()) return this.postJson<T>(path, body, true)
+      }
+      throw new GatewayError('UNAUTHENTICATED', '未登录或 token 过期')
+    }
     if (response.status === 429) throw new GatewayError('RATE_LIMIT', '触发限流')
     if (!response.ok) {
       const text = await response.text().catch(() => '')

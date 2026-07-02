@@ -17,7 +17,7 @@ export type PreLLMHook = (ctx: PreLLMCtx) => Promise<void>
 export type PostLLMDraft = { text: string; loop: LlmLoop; bubble?: string; usedFallback?: boolean }
 export type PostLLMHook = (draft: PostLLMDraft) => Promise<PostLLMDraft>
 
-export type ToolCall = { tool: string; input: unknown; taskId?: string }
+export type ToolCall = { tool: string; input: unknown; taskId?: string; scope?: { dirs: string[]; net: boolean } }
 export type PreToolUseBlock = { block: ErrCode; message: string }
 export type PreToolUseHook = (call: ToolCall) => Promise<void | PreToolUseBlock>
 

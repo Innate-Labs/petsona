@@ -22,14 +22,19 @@ export function startMockGateway(opts: MockGatewayOptions = {}): Promise<{ url: 
       if (req.url === '/v1/auth/request-code') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: true, ttlSec: 600 }))
-      } else if (req.url === '/v1/auth/verify-code') {
+      } else if (req.url === '/v1/auth/login') {
+        // 与真网关对齐：路由是 /v1/auth/login，email 在 user 里（真机 smoke 抓过错位教训）
         if (json.code !== fixedCode) {
           res.writeHead(401, { 'content-type': 'application/json' })
           res.end(JSON.stringify({ error: 'bad code' }))
           return
         }
         res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ accessToken: 'test-access', refreshToken: 'test-refresh', email: json.email }))
+        res.end(JSON.stringify({
+          accessToken: 'test-access',
+          refreshToken: 'test-refresh',
+          user: { id: 'test-user', email: json.email },
+        }))
       } else if (req.url === '/v1/auth/logout') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: true }))

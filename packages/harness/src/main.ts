@@ -2,7 +2,7 @@
 // 装配所有子系统 + 注册 §3.1 全消息表（M1 Gate ④：未用到的返回占位）
 
 import { createInterface } from 'node:readline'
-import type { Emotion, Envelope } from '@petsona/shared'
+import type { Emotion, Envelope, FileOp, StagingPlan, TaskResult } from '@petsona/shared'
 import { IPC, TRACK } from '@petsona/shared'
 import { decodeLine, encodeLine, makeEvent } from './ipc/envelope.js'
 import { Router, IpcError } from './ipc/router.js'
@@ -27,9 +27,13 @@ import {
 } from './hooks/post/index.js'
 import { ToolRegistry } from './tools/registry.js'
 import { registerLightTools } from './tools/light/index.js'
+import { registerHeavyTools } from './tools/heavy/index.js'
 import { InjectionQueue } from './loop/injection_queue.js'
 import { CompanionLoop } from './loop/companion.js'
 import { Tracker } from './telemetry/track.js'
+import { TaskBoard, TaskBoardError } from './tasks/board.js'
+import { makeSubagentExecutor, validateTaskResult } from './tasks/subagent.js'
+import { StagingStore } from './staging/store.js'
 import { join } from 'node:path'
 
 const startedAt = Date.now()
@@ -63,9 +67,59 @@ export function createHarness(emitLine: (line: string) => void) {
   const sysState = { accessibility: false, screenRecording: false, automation: {} as Record<string, boolean> }
   let emotion: Emotion = 'calm'
   let emotionCause = 'startup'
+  const staging = new StagingStore(paths)
+
+  // ---- hooks 与工具注册表（companion/subagent 结构隔离，但共享权限/审计管线） ----
+  const hooks = new HookPipeline()
+  const registry = new ToolRegistry('companion')
+  const subagentRegistry = new ToolRegistry('subagent')
+  registerHeavyTools(subagentRegistry, { paths, staging })
+  const permissionRegistry = {
+    get: (name: string) => registry.get(name) ?? subagentRegistry.get(name),
+  }
+
+  const taskBoard = new TaskBoard({
+    tasksDir: paths.tasksDir,
+    getConfig: () => config.get(),
+    emit,
+    executor: makeSubagentExecutor({
+      gateway,
+      registry: subagentRegistry,
+      hooks,
+      paths,
+      emit,
+      getConfig: () => config.get(),
+      staging,
+    }),
+    enqueueResult: (task) => {
+      const status = task.status
+      const summary = task.result?.didWhat?.join('；') || task.result?.leftover?.join('；') || task.goal
+      queue.push({
+        source: 'task',
+        priority: 1,
+        content: `<task-result id="${task.id}" status="${status}">${summary}</task-result>`,
+        dedupeKey: `task:${task.id}:${status}`,
+        expiresAt: Date.now() + 30 * 60_000,
+      })
+    },
+    onDispatch: (task) => tracker.track(TRACK.任务_派发, {
+      agentType: task.agentType,
+      skill: task.skill,
+      scopeDirs: task.scope.dirs.length,
+    }),
+    onAwaitingApproval: (_task, digest) => tracker.track(TRACK.审批_请求, {
+      opCounts: digest.counts,
+      risk: digest.risk,
+    }),
+    onResult: (task) => tracker.track(TRACK.任务_完成, {
+      status: task.status,
+      toolCalls: task.usage.toolCalls,
+      tokens: task.usage.tokens,
+      durationSec: task.result?.stats.durationSec ?? 0,
+    }),
+  })
 
   // ---- hooks 管线全挂载（§3.7 固定顺序；M1 部分为 stub 但链路走通） ----
-  const hooks = new HookPipeline()
   hooks.onPreTurn('injection_guard', injectionGuard)
   hooks.onPreTurn('local_rate', makeLocalRate(pool))
   hooks.onPreTurn('track_start', async () => { /* 对话_发起在 loop 内带字数埋点，这里保管线位 */ })
@@ -81,18 +135,15 @@ export function createHarness(emitLine: (line: string) => void) {
   hooks.onPostLLM('fallback', makeFallbackHook(pool))
   hooks.onPostLLM('track_end', makeTrackEndHook(tracker))
 
-  const registry = new ToolRegistry('companion')
-  hooks.onPreToolUse('permission', makePermissionHook(registry, pool, emit))
+  hooks.onPreToolUse('permission', makePermissionHook(permissionRegistry, pool, emit))
   hooks.onPreToolUse('scope', scopeHook)
-  hooks.onPreToolUse('audit', makeAuditHook(paths.auditLog, registry))
+  hooks.onPreToolUse('audit', makeAuditHook(paths.auditLog, permissionRegistry))
   hooks.onPostToolUse('persist_large', makePersistLargeHook(paths.outputsDir))
   hooks.onPostToolUse('staging_record', stagingRecordHook)
   hooks.onPostToolUse('progress_mirror', progressMirrorHook)
-  hooks.onSubagentStop('result_schema', async () => {
-    throw new Error('M2 实现：子 Agent 结果 schema 校验')
-  })
+  hooks.onSubagentStop('result_schema', validateTaskResult)
 
-  registerLightTools(registry, { store, skills, paths, emit, sysState })
+  registerLightTools(registry, { store, skills, paths, taskBoard, emit, sysState })
 
   const loop = new CompanionLoop({
     gateway, store, registry, hooks, queue, pool, tracker, paths, emit,
@@ -116,12 +167,69 @@ export function createHarness(emitLine: (line: string) => void) {
   // 宠物状态类
   router.onReq(IPC.BUBBLE_ACTION, async () => ({ placeholder: true, note: 'M2 实现（审批气泡回传）' }))
 
-  // 任务与审批类（M2 占位，Gate ④）
-  router.onReq(IPC.TASK_LIST_GET, async () => ({ tasks: [] }))
-  router.placeholder(IPC.TASK_CANCEL, 'M2')
-  router.placeholder(IPC.PLAN_GET, 'M2')
-  router.placeholder(IPC.APPROVAL_DECISION, 'M2')
-  router.placeholder(IPC.UNDO_REQUEST, 'M2')
+  // 任务与审批类
+  router.onReq(IPC.TASK_LIST_GET, async () => ({ tasks: taskBoard.list() }))
+  router.onReq(IPC.TASK_CANCEL, async (p: { taskId?: string }) => {
+    try {
+      return taskBoard.cancel(String(p?.taskId ?? ''))
+    } catch (err) {
+      if (err instanceof TaskBoardError) throw new IpcError(err.code, err.message)
+      throw err
+    }
+  })
+  router.onReq(IPC.PLAN_GET, async (p: { planId?: string }) => {
+    const plan = staging.get(String(p?.planId ?? ''))
+    if (!plan) throw new IpcError('BAD_REQUEST', '审批计划不存在')
+    return { plan }
+  })
+  router.onReq(IPC.APPROVAL_DECISION, async (p: {
+    planId?: string
+    decision?: 'approve' | 'reject' | 'partial'
+    excludedOpIds?: string[]
+  }) => {
+    const planId = String(p?.planId ?? '')
+    const plan = staging.get(planId)
+    if (!plan) throw new IpcError('BAD_REQUEST', '审批计划不存在')
+    const decision = p?.decision ?? 'reject'
+    tracker.track(TRACK.审批_决策, {
+      decision,
+      excluded: Array.isArray(p?.excludedOpIds) ? p.excludedOpIds.length : 0,
+    })
+    if (decision === 'reject') {
+      const rejected = staging.reject(planId)
+      taskBoard.rejectApproval(rejected.taskId)
+      return { ok: true, plan: rejected }
+    }
+    try {
+      const applyingTask = taskBoard.markApplying(plan.taskId)
+      const excludedOpIds = decision === 'partial' ? p.excludedOpIds ?? [] : []
+      const outcome = staging.apply(planId, excludedOpIds)
+      const result = approvalResult(applyingTask.result, outcome.plan, outcome.applied, outcome.failed, excludedOpIds)
+      taskBoard.completeAfterApproval(plan.taskId, result)
+      if (outcome.failed.length) throw new IpcError('STAGING_APPLY_FAILED', outcome.failed[0]?.reason ?? '应用失败')
+      return { ok: true, applied: outcome.applied, failed: outcome.failed, plan: outcome.plan }
+    } catch (err) {
+      if (err instanceof IpcError) throw err
+      const result: TaskResult = {
+        ok: false,
+        didWhat: plan.ops.length ? ['审批通过，但应用 staging 计划失败'] : [],
+        changes: [],
+        leftover: [err instanceof Error ? err.message : String(err)],
+        stats: { durationSec: 0 },
+      }
+      try { taskBoard.completeAfterApproval(plan.taskId, result) } catch { /* 状态可能已收口 */ }
+      throw new IpcError('STAGING_APPLY_FAILED', err instanceof Error ? err.message : String(err))
+    }
+  })
+  router.onReq(IPC.UNDO_REQUEST, async (p: { planId?: string }) => {
+    try {
+      const out = staging.undo(String(p?.planId ?? ''))
+      tracker.track(TRACK.撤销_触发, { restored: out.restored, failed: out.failed.length })
+      return out
+    } catch (err) {
+      throw new IpcError('BAD_REQUEST', err instanceof Error ? err.message : String(err))
+    }
+  })
 
   // 提醒类（调度器 M3；SET 走轻工具同款持久化占位）
   router.placeholder(IPC.REMINDER_SET, 'M3')
@@ -173,6 +281,9 @@ export function createHarness(emitLine: (line: string) => void) {
     tracker.track(TRACK.登录, {})
     return { ok: true, email: res.email }
   })
+  // 为什么要有 pull 口：harness 启动恢复登录态的广播可能早于面板 webview 订阅，
+  // 只靠 AUTH_STATE_CHANGED 会丢事件（真机竞态实测），面板挂载时必须能主动拉一次
+  router.onReq(IPC.AUTH_STATE_GET, async () => authState)
   router.onReq(IPC.LOGOUT, async () => {
     await gateway.logout()
     authState = { loginState: 'anon' }
@@ -213,7 +324,40 @@ export function createHarness(emitLine: (line: string) => void) {
     },
     shutdown: () => { tracker.stop(); db.close() },
     // 测试钩子
-    _internals: { hooks, registry, queue, pool, store, config, get emotion() { return emotion } },
+    _internals: { hooks, registry, subagentRegistry, staging, queue, pool, store, config, get emotion() { return emotion } },
+  }
+}
+
+function approvalResult(
+  previous: TaskResult | undefined,
+  plan: StagingPlan,
+  applied: number,
+  failed: { opId: string; reason: string }[],
+  excludedOpIds: string[] = [],
+): TaskResult {
+  const excluded = new Set(excludedOpIds)
+  return {
+    ok: failed.length === 0,
+    didWhat: [...(previous?.didWhat ?? []), `已应用 ${applied} 项审批操作`],
+    changes: plan.ops.filter((op) => !excluded.has(op.opId)).map(opToChange),
+    findings: previous?.findings,
+    leftover: failed.length
+      ? failed.map((f) => `${f.opId}: ${f.reason}`)
+      : (previous?.leftover ?? []).filter((x) => !x.includes('等待用户审批')),
+    stats: { ...previous?.stats, durationSec: previous?.stats.durationSec ?? 0 },
+  }
+}
+
+function opToChange(op: FileOp): { op: string; path: string } {
+  switch (op.op) {
+    case 'write':
+    case 'mkdir':
+      return { op: op.op, path: op.dst }
+    case 'move':
+    case 'rename':
+      return { op: op.op, path: op.dst }
+    case 'trash':
+      return { op: op.op, path: op.src }
   }
 }
 

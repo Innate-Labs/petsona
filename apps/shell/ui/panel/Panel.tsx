@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { IPC } from '@petsona/shared'
 import type { AuthStateChangedPayload } from '@petsona/shared'
-import { on } from '../lib/ipc'
+import { on, request } from '../lib/ipc'
 import { loadProfile } from '../lib/local'
 import { PageShell } from './kit'
 import { Home } from './Home'
@@ -41,6 +41,10 @@ export function Panel() {
 
   useEffect(() => {
     const offAuth = on<AuthStateChangedPayload>(IPC.AUTH_STATE_CHANGED, setAuth)
+    // 广播 + 拉取双保险：harness 恢复登录态的广播可能早于本窗口订阅（真机竞态实测），挂载时补拉一次
+    void request<AuthStateChangedPayload>(IPC.AUTH_STATE_GET)
+      .then(setAuth)
+      .catch(() => {}) // 拉不到就维持 anon，等广播兜底
     const onHash = () => setPage(pageFromHash())
     window.addEventListener('hashchange', onHash)
     return () => {

@@ -152,8 +152,14 @@ function mockRespond(env: Envelope): void {
     case IPC.CHAT_HISTORY_GET:
       mockRes(env, { turns: [] })
       return
+    case IPC.TASK_LIST_GET:
+      mockRes(env, { tasks: [] })
+      return
     case IPC.CONFIG_GET:
       mockRes(env, { config: DEFAULT_CONFIG })
+      return
+    case IPC.AUTH_STATE_GET:
+      mockRes(env, { loginState: 'anon' })
       return
     case IPC.LOGIN_SUBMIT: {
       const { email } = env.payload as { email: string }

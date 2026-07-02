@@ -28,8 +28,7 @@ describe('PING e2e', () => {
     expect(res.ok).toBe(true)
   })
 
-  it('M2 占位消息返回 placeholder（Gate ④：全消息表实现）', async () => {
-    const res = await h.request('PLAN_GET', { planId: 'x' })
-    expect(res.placeholder).toBe(true)
+  it('PLAN_GET 未知计划返回 BAD_REQUEST', async () => {
+    await expect(h.request('PLAN_GET', { planId: 'x' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 })

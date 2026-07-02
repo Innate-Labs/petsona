@@ -3,25 +3,30 @@
 
 import { appendFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { homedir } from 'node:os'
+import { isAbsolute, resolve } from 'node:path'
 import type { AuditEntry, PermissionLevel } from '@petsona/shared'
 import { BUILTIN_L3_RULES, IPC } from '@petsona/shared'
 import type { PreToolUseHook, PostToolUseHook } from '../pipeline.js'
 import type { ToolRegistry } from '../../tools/registry.js'
 import type { FallbackPool } from '../../persona/fallback_pool.js'
 
+type ToolLookup = Pick<ToolRegistry, 'get'>
+
 /** 求值（§3.5 简化版）：M1 无 user 规则，取工具注册默认级；builtin L3 短路一切 */
-export function evaluateLevel(reg: ToolRegistry, tool: string, input: unknown): { level: PermissionLevel; ruleId?: string } {
+export function evaluateLevel(reg: ToolLookup, tool: string, input: unknown): { level: PermissionLevel; ruleId?: string } {
   const inputStr = JSON.stringify(input ?? {})
   for (const rule of BUILTIN_L3_RULES) {
     if (rule.tool !== tool) continue
     if (rule.match?.cmdRegex && !new RegExp(rule.match.cmdRegex).test(inputStr)) continue
+    if (rule.match?.pathGlob && !inputPaths(input).some((p) => globMatch(rule.match!.pathGlob!, p))) continue
     return { level: 'L3', ruleId: rule.id }
   }
   const def = reg.get(tool)
   return { level: def?.defaultLevel ?? 'L3' }
 }
 
-export function makePermissionHook(reg: ToolRegistry, pool: FallbackPool, emit: (e: { type: string; payload: unknown }) => void): PreToolUseHook {
+export function makePermissionHook(reg: ToolLookup, pool: FallbackPool, emit: (e: { type: string; payload: unknown }) => void): PreToolUseHook {
   return async (call) => {
     const { level } = evaluateLevel(reg, call.tool, call.input)
     if (level === 'L3') {
@@ -34,15 +39,38 @@ export function makePermissionHook(reg: ToolRegistry, pool: FallbackPool, emit: 
         payload: { text: pool.pick(call.tool), durationMs: 4000, kind: 'task' },
       })
     }
-    // L2=确认走 staging 聚合审批（M2）；companion 轻工具无 L2
+    if (level === 'L2') {
+      return { block: 'PERMISSION_DENIED' as const, message: `工具 ${call.tool} 需要审批，当前审批链路尚未接入` }
+    }
   }
 }
 
-export const scopeHook: PreToolUseHook = async () => {
-  // 轻工具不触达文件系统 scope；重工具 scope 校验随 M2 子 Agent 落地（结构位保留）
+export const scopeHook: PreToolUseHook = async (call) => {
+  if (call.tool === 'web_fetch' && call.scope && !call.scope.net) {
+    return { block: 'SCOPE_VIOLATION' as const, message: '此任务未授权联网' }
+  }
+  if (!call.scope) return
+
+  const paths = inputPaths(call.input)
+  const scopeBase = call.scope.dirs[0] ?? process.cwd()
+  if (call.tool === 'shell' || call.tool === 'applescript') {
+    const cwd = typeof (call.input as { cwd?: unknown } | null)?.cwd === 'string'
+      ? (call.input as { cwd: string }).cwd
+      : scopeBase
+    paths.push(cwd)
+  }
+  if (paths.length === 0) return
+
+  const allowed = call.scope.dirs.map((dir) => normalizePath(dir))
+  for (const p of paths) {
+    const normalized = normalizePath(p, scopeBase)
+    if (!allowed.some((base) => normalized === base || normalized.startsWith(`${base}/`))) {
+      return { block: 'SCOPE_VIOLATION' as const, message: `路径超出任务 scope：${p}` }
+    }
+  }
 }
 
-export function makeAuditHook(auditPath: string, reg: ToolRegistry): PreToolUseHook {
+export function makeAuditHook(auditPath: string, reg: ToolLookup): PreToolUseHook {
   return async (call) => {
     const { level, ruleId } = evaluateLevel(reg, call.tool, call.input)
     const entry: AuditEntry = {
@@ -75,3 +103,32 @@ export function makePersistLargeHook(outputsDir: string): PostToolUseHook {
 
 export const stagingRecordHook: PostToolUseHook = async (_call, output) => output   // M2：staging 计划记录
 export const progressMirrorHook: PostToolUseHook = async (_call, output) => output  // M2：todo/进度镜像 TASK_EVENT
+
+function inputPaths(input: unknown): string[] {
+  const out: string[] = []
+  const visit = (v: unknown, key = '') => {
+    if (typeof v === 'string' && /^(path|from|to|cwd|file|dir)$/i.test(key)) out.push(v)
+    else if (Array.isArray(v)) v.forEach((x) => visit(x, key))
+    else if (v && typeof v === 'object') {
+      for (const [k, val] of Object.entries(v)) visit(val, k)
+    }
+  }
+  visit(input)
+  return out
+}
+
+function normalizePath(path: string, base?: string): string {
+  const expanded = path.startsWith('~') ? `${homedir()}${path.slice(1)}` : path
+  const basePath = base ? normalizePath(base) : process.cwd()
+  return resolve(isAbsolute(expanded) ? expanded : resolve(basePath, expanded)).replace(/\\/g, '/')
+}
+
+function globMatch(glob: string, path: string): boolean {
+  const normalizedGlob = glob.startsWith('~') ? `${homedir()}${glob.slice(1)}` : glob
+  const normalizedPath = path.startsWith('~') ? `${homedir()}${path.slice(1)}` : path
+  const esc = normalizedGlob.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '\0')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\0/g, '.*')
+  return new RegExp(`^${esc}$`).test(normalizedPath.replace(/\\/g, '/'))
+}

@@ -1,16 +1,15 @@
 // 8 个轻工具（loop=companion，§3.6）——低延迟、无/极小副作用
-// dispatch_task M1 占位：返回「M2 才会干活喵」（v3.0 A.3 本轮范围）
 
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { CronJob, Emotion, ToolDef } from '@petsona/shared'
 import { IPC } from '@petsona/shared'
 import type { LocalMemoryStore } from '../../memory/store.js'
 import type { SkillLoader } from '../../skills/loader.js'
 import type { DataPaths } from '../../paths.js'
+import type { TaskBoard } from '../../tasks/board.js'
 import { wrapExternal } from '../../hooks/pre/injection_guard.js'
 import { ToolRegistry } from '../registry.js'
 
@@ -20,6 +19,7 @@ export type LightToolDeps = {
   store: LocalMemoryStore
   skills: SkillLoader
   paths: DataPaths
+  taskBoard: TaskBoard
   emit: (event: { type: string; payload: unknown }) => void
   sysState: { accessibility: boolean }    // SYS_PERMISSION_STATE 镜像
 }
@@ -110,7 +110,7 @@ export function registerLightTools(reg: ToolRegistry, deps: LightToolDeps): void
       },
       loop: 'companion',
       defaultLevel: 'L1',
-      handler: async () => ({ taskId: 'task_m2_placeholder', note: 'M2 才会干活喵' }),
+      handler: async (input, ctx) => deps.taskBoard.dispatch(input, ctx.taskId),
     },
     {
       name: 'check_task',
@@ -119,11 +119,16 @@ export function registerLightTools(reg: ToolRegistry, deps: LightToolDeps): void
       loop: 'companion',
       defaultLevel: 'L0',
       handler: async (input: { taskId: string }) => {
-        if (!/^[\w-]+$/.test(input.taskId)) return { found: false }
-        const p = join(deps.paths.tasksDir, `task_${input.taskId.replace(/^task_/, '')}.json`)
-        if (!existsSync(p)) return { found: false, note: '没有这个任务（M2 后任务才会真实落盘）' }
-        const rec = JSON.parse(readFileSync(p, 'utf8'))
-        return { found: true, status: rec.status, goal: rec.goal, usage: rec.usage }
+        const rec = deps.taskBoard.get(String(input.taskId ?? ''))
+        if (!rec) return { found: false }
+        return {
+          found: true,
+          taskId: rec.id,
+          status: rec.status,
+          goal: rec.goal,
+          usage: rec.usage,
+          result: rec.result,
+        }
       },
     },
     {
