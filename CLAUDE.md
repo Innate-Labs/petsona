@@ -11,6 +11,7 @@ macOS 桌宠 Agent（Tauri 壳 + Node Harness + 云网关）。运行/测试/接
 | `../宠格Petsona-开发规格说明书.md`（v2.1） | 标「继承 v2.1」的条款按原文执行 |
 | `../宠格_Petsona_提示词体系_V0.1.md` | 13 个 prompt 定义 |
 | [SPEC-GAPS.md](SPEC-GAPS.md) | 规格空白的默认决策（30+ 条，回填规格前必读） |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | 当前交接状态、真机 smoke check、M2 开工入口 |
 | `../learn-claude-code-main/` | 机制编号出处（Python 教学参考，**不复用代码**） |
 
 ## 硬边界（违反即架构污染；tests/unit/structural.test.ts 机器强制）
@@ -49,4 +50,4 @@ harness 其他 env：`PETSONA_HARNESS_CMD`（壳 spawn sidecar 的覆盖命令�
 
 ## 里程碑状态（写代码前必知）
 
-M1「会陪」已交付；**M2 未开工**——`dispatch_task` 是占位（返回「M2 才会干活喵」），重工具/子 Agent/staging/审批撤销/4 技能都不存在；调度器与心跳只有类型与目录（M3）；`dream()` 空实现（M3）。M1 遗留验证项与 M2 待办见 SPEC-GAPS.md 末节及 README「M1 范围与后续」。
+M1「会陪」已交付；**M2 未开工**——`dispatch_task` 是占位（返回「M2 才会干活喵」），重工具/子 Agent/staging/审批撤销/4 技能都不存在；调度器与心跳只有类型与目录（M3）；`dream()` 空实现（M3）。M1 手动验收和 M2 开工入口见 docs/HANDOFF.md。

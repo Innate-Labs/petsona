@@ -21,6 +21,7 @@ macOS 桌面常驻的「上班搭子」宠物：人格聊天 + 记忆 + （M2 �
 - `apps/shell` — Tauri 壳（src-tauri Rust + ui React）
 - `apps/gateway` — 云网关
 - `tests` — 结构性约束 / 工具契约 / Gate ①②③⑤ 自动化（helpers 含 mock 网关）
+- `docs/HANDOFF.md` — 当前交接状态、真机 smoke check、下一阶段入口
 
 ## 快速开始
 
@@ -77,6 +78,7 @@ tasks/ / staging/ / plans/ / undo/ / scheduled.json / outputs/ / logs/audit.json
 
 ## M1 范围与后续
 
+- M1 shell 收尾已包括桌宠位置恢复和真机快捷聊天浮窗；手动验收步骤见 [docs/HANDOFF.md](docs/HANDOFF.md)。
 - dispatch_task 返回占位「M2 才会干活喵」；调度器/心跳只有目录与类型（M3）；dream() 空实现（M3）；AudioProvider 未启用（M4）。
 - 规格未覆盖处的实现决策见 [SPEC-GAPS.md](SPEC-GAPS.md)（交付 review 后回填规格）。
 - GitHub 远程：**尚未推送**——本地 main 分支已按模块 conventional commits，等仓库地址就绪后 `git remote add origin <url> && git push -u origin main`。
