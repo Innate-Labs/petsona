@@ -13,18 +13,29 @@ const FLOAT_HEIGHT: f64 = 425.0;
 const FLOAT_GAP: f64 = 12.0;
 
 /// 打开/聚焦面板窗口（宠物菜单与托盘共用）
+/// 面板子页 hash 是 #/panel/<page>（Panel.tsx 按 split('/')[2] 取页名），
+/// 调用方只传子页名（chat/data/…）或 "panel" 表示首页，这里统一补前缀
 #[tauri::command]
 fn open_panel(app: AppHandle, route: Option<String>) {
     let label = "panel";
+    let raw = route.unwrap_or_default();
+    let page = raw
+        .trim_start_matches("#/")
+        .trim_start_matches("panel")
+        .trim_start_matches('/');
+    let hash = if page.is_empty() {
+        "#/panel".to_string()
+    } else {
+        format!("#/panel/{page}")
+    };
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
         let _ = win.set_focus();
-        if let Some(r) = route {
-            let _ = win.eval(&format!("location.hash = '#/{}'", r.trim_start_matches("#/")));
-        }
+        let _ = win.eval(&format!("location.hash = '{hash}'"));
         return;
     }
-    let _ = WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html#/panel".into()))
+    // 首次打开也要带上子页，否则深链在窗口创建路径上丢失
+    let _ = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(format!("index.html{hash}").into()))
         .title("宠格 Petsona")
         .inner_size(920.0, 640.0)
         .build();

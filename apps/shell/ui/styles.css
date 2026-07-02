@@ -329,6 +329,19 @@ body[data-route='float'] {
   flex: 1;
 }
 
+/* 头像+名字整体可点：打开主面板；沿用头部布局，不加按钮底色 */
+.float-head-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
 .icon-btn {
   border: none;
   background: transparent;

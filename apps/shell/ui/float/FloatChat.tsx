@@ -32,12 +32,20 @@ export function FloatChat() {
     else window.location.hash = '#/pet' // 浏览器原型回宠物视图
   }
 
+  const openHome = () => {
+    if (isTauri()) void invoke('open_panel', { route: 'panel' })
+    else window.location.hash = '#/panel'
+  }
+
   return (
     <div className="float-chat">
-      <div className="float-head">
-        <PetAvatar />
-        <span className="float-head-name">{name}</span>
-        <span className="float-head-spacer" />
+      {/* data-tauri-drag-region 只对元素本身生效：头部空白与 spacer 可拖窗，按钮/头像照常点击 */}
+      <div className="float-head" data-tauri-drag-region>
+        <button className="float-head-id" onClick={openHome} aria-label="打开面板">
+          <PetAvatar />
+          <span className="float-head-name">{name}</span>
+        </button>
+        <span className="float-head-spacer" data-tauri-drag-region />
         <button className="icon-btn" onClick={openHistory} aria-label="历史对话">
           <img src={iconHistory} alt="" />
         </button>

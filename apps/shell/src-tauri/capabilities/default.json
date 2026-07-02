@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "core 权限：ipc.ts 的 listen('harness-envelope') 走 core:event，缺 capability 时 Tauri v2 ACL 会静默拒绝，H→UI 响应全部超时",
+  "windows": ["pet", "panel", "float"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging"
+  ]
+}

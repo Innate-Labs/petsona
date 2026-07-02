@@ -90,6 +90,14 @@ export function Settings() {
         <input type="checkbox" checked={mute} onChange={(e) => setMute(e.target.checked)} />
         <span>全屏应用时静默</span>
       </label>
+      <div className="field">
+        <span>任务审批</span>
+        {/* Panel 深链注释承诺的「设置中心入口」：审批/记忆页不在首页四卡里，从这里进 */}
+        <div className="settings-actions">
+          <button onClick={() => { window.location.hash = '#/panel/approval' }}>审批与撤销</button>
+          <button onClick={() => { window.location.hash = '#/panel/memory' }}>记忆管理</button>
+        </div>
+      </div>
       <div className="settings-actions">
         <button onClick={save} disabled={!loaded}>
           保存
