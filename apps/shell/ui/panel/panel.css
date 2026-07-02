@@ -1,0 +1,644 @@
+/* panel/panel.css —— 面板五页（首页/宠物数据/对话记录/提醒事项/设置中心）样式，规格见 ../DESIGN.md */
+
+/* 面板壳：Figma 帧 337×551 等比放大到窗口；浏览器里限宽居中即是响应式原型 */
+.panel-shell {
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-grad);
+  box-shadow: var(--shadow-window);
+  overflow: hidden;
+}
+
+/* ---------- 页头/页脚（组件库 页头 32:4143 / 页脚 32:4008） ---------- */
+
+.page-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding: 0 16px;
+  background: var(--bg-grad);
+}
+
+.page-head .avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.page-head-title {
+  flex: 1;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.page-head-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.page-foot {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 24px;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--text-sub);
+  border-top: 1px solid var(--panel-border);
+  background: var(--bg-grad);
+}
+
+.page-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  position: relative;
+}
+
+/* ---------- 首页（82:2040） ---------- */
+
+.home-hero {
+  position: relative;
+  padding-top: 8px;
+  min-height: 160px;
+}
+
+.home-greet {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.home-days-label {
+  font-size: 13px;
+  margin: 14px 0 0;
+}
+
+.home-days {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.home-days span {
+  font-size: 18px;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.home-mood {
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.home-pet {
+  position: absolute;
+  right: 0;
+  top: 8px;
+  width: 150px;
+  height: 150px;
+}
+
+.home-pet .sprite {
+  width: 150px;
+  height: 150px;
+}
+
+/* 2×2 方卡（首页方形卡片 33:996：148×135 圆角24 白描边） */
+.home-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 135px;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  text-align: left;
+  padding: 15px;
+  overflow: hidden;
+}
+
+.home-card--active {
+  background: var(--card-active-grad);
+}
+
+.home-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 卡 icon：46 圆底 + 24 glyph 叠放（Figma Group 24） */
+.home-card-icon {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+}
+
+.home-card-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.home-card-icon img.glyph {
+  inset: 11px;
+  width: 24px;
+  height: 24px;
+}
+
+.home-card-value {
+  font-size: 24px;
+  line-height: 25px;
+  color: var(--text);
+}
+
+.home-card-sub {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-card--active .home-card-sub {
+  color: var(--text);
+}
+
+.home-card-title {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 26px;
+}
+
+/* ---------- 列表行（对话记录 25:3485 / todo 33:1369：h36 圆角16） ---------- */
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.section-head img {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.row:hover,
+.row--active {
+  background: var(--row-active);
+}
+
+.row-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-time {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.row-del {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  display: none;
+}
+
+.row:hover .row-del {
+  display: block;
+}
+
+.row-del img {
+  width: 100%;
+  height: 100%;
+}
+
+/* todo 勾选框（33:1374：16px 圆角5 描边 --text，完成划线） */
+.todo-check {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--text);
+  border-radius: 5px;
+  background: transparent;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.todo-check img {
+  width: 10px;
+  height: 10px;
+}
+
+.row--done .row-title {
+  text-decoration: line-through;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--panel-border);
+  margin: 8px 0;
+}
+
+/* ---------- 提醒事项（82:2252） ---------- */
+
+.remind-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.remind-card {
+  position: relative;
+  height: 126px;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-card);
+  padding: 15px;
+}
+
+.remind-card--active {
+  background: var(--card-active-grad);
+}
+
+.remind-card-title {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 26px;
+  margin: 0;
+}
+
+.remind-card-value {
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: 8px;
+}
+
+.remind-card-value--long {
+  font-size: 18px;
+}
+
+.remind-card-chips {
+  position: absolute;
+  left: 15px;
+  right: 15px;
+  bottom: 15px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* FAB（82:2266：51px 渐变圆 + 白加号） */
+.fab {
+  position: sticky;
+  bottom: 8px;
+  margin-left: auto;
+  margin-right: auto;
+  display: grid;
+  place-items: center;
+  width: 51px;
+  height: 51px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: var(--card-active-grad);
+  box-shadow: var(--shadow-card);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+}
+
+/* ---------- 宠物数据（82:2065） ---------- */
+
+.petdata-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+}
+
+.petdata-id .avatar {
+  width: 50px;
+  height: 50px;
+}
+
+.petdata-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.petdata-name img {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.petdata-no {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 2px;
+}
+
+.data-panel {
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  background: var(--bg-grad);
+  padding: 0 0 4px;
+}
+
+.data-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 16px;
+}
+
+.data-row + .data-row {
+  border-top: 1px solid var(--panel-border);
+}
+
+.data-row > img {
+  width: 28px;
+  height: 28px;
+}
+
+.data-row-label {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.data-row-value {
+  font-size: 16px;
+}
+
+/* 下拉 chip（33:372：白底 56×28 圆角999） */
+.drop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.drop-chip img {
+  width: 12px;
+  height: 12px;
+}
+
+/* 长按钮（33:238：305×52 渐变圆角999） */
+.long-btn {
+  display: block;
+  width: 100%;
+  height: 52px;
+  margin-top: 16px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: var(--card-active-grad);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.long-btn--danger {
+  background: var(--chip-off);
+  color: var(--danger-text);
+}
+
+/* ---------- 设置中心（82:2269） ---------- */
+
+.setting-card {
+  position: relative;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  background: var(--row-active);
+  padding: 15px;
+  margin-top: 9px;
+}
+
+.setting-card--active {
+  background: var(--card-active-grad);
+  box-shadow: var(--shadow-card);
+}
+
+.setting-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.setting-card-sub {
+  font-size: 12px;
+  margin: 8px 0 0;
+  color: var(--text);
+}
+
+.setting-card-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: justify;
+  margin: 10px 0 0;
+}
+
+.setting-card-ctrl {
+  position: absolute;
+  top: 23px;
+  right: 15px;
+}
+
+/* ---------- 登录（奶油化） ---------- */
+
+.panel--login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 280px;
+  text-align: center;
+}
+
+.login-face {
+  width: 96px;
+  height: 96px;
+}
+
+.login h1 {
+  font-size: 20px;
+  margin: 0;
+  color: var(--text);
+}
+
+.login-hint {
+  color: var(--text-sub);
+  margin: 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.login-err {
+  color: var(--danger-text);
+  margin: 0;
+}
+
+button.link {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  text-decoration: underline;
+}
+
+.placeholder {
+  padding: 24px 8px;
+  color: var(--text-sub);
+}
+
+/* ---------- 对话记录页（复用浮窗气泡样式，撑满面板主体） ---------- */
+
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: 0 -8px;
+}
+
+.chat-page-list {
+  padding-top: 8px;
+}
+
+.chat-page .super-input {
+  width: 100%;
+  max-width: 305px;
+}
+
+.chat-page .float-msg {
+  max-width: 80%;
+}
+
+.msg-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-cursor {
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* ---------- 旧设置页兼容（重写排期在自启开关合并后，先不破功能） ---------- */
+
+.settings h2 {
+  margin: 12px 0;
+  font-size: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field > span {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.field--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field input.narrow {
+  width: 80px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+button.danger {
+  background: var(--chip-off);
+  border: none;
+  color: var(--danger-text);
+}
+
+.settings-note {
+  color: var(--text-sub);
+}

@@ -1,4 +1,142 @@
-// panel/Reminders.tsx —— 提醒占位（REMINDER_SET / STOP / FIRED）
+// panel/Reminders.tsx —— 提醒事项页（Figma 82:2252）：四方卡 + Todo 列表 + FAB
+// 提醒走 REMINDER_SET/STOP（schedule_reminder 由 harness 落 cron）；
+// SPEC-GAP: 协议无 REMINDER_STATE_GET，卡片开关态本地记忆（lib/local.ts）。
+// SPEC-GAP: Todo 无 harness 数据域，M1 暂存 localStorage。
+
+import { useEffect, useState } from 'react'
+import { IPC } from '@petsona/shared'
+import type { Config, ConfigGetRes, ReminderFiredPayload, ReminderKind, ReminderSetPayload } from '@petsona/shared'
+import { on, request } from '../lib/ipc'
+import { loadPrefs, loadTodos, savePrefs, saveTodos } from '../lib/local'
+import type { TodoItem } from '../lib/local'
+import iconExpand from '../assets/figma/icon-expand-18.svg'
+import iconDelete from '../assets/figma/icon-delete-28.svg'
+import iconCheck from '../assets/figma/icon-check.svg'
+
+type CardDef = { kind: ReminderKind; title: string; value: string }
+
+const CARDS: CardDef[] = [
+  { kind: 'pomodoro', title: '番茄钟', value: '25:00' },
+  { kind: 'water', title: '喝水提醒', value: '32:00' },
+  { kind: 'stand', title: '站立提醒', value: '60:00' },
+]
+
 export function Reminders() {
-  return <div className="placeholder">番茄钟 / 喝水 / 站立提醒 —— M3 交付</div>
+  const [prefs, setPrefs] = useState(loadPrefs)
+  const [todos, setTodos] = useState<TodoItem[]>(loadTodos)
+  const [quiet, setQuiet] = useState<[string, string] | null>(null)
+  const [todoOpen, setTodoOpen] = useState(true)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    void request<ConfigGetRes>(IPC.CONFIG_GET, {})
+      .then(({ config }) => setQuiet(config.proactive.quietHours))
+      .catch(() => {})
+    // 提醒触发时刷新一行文案，让页面「活」——气泡另由宠物窗展示
+    return on<ReminderFiredPayload>(IPC.REMINDER_FIRED, (p) => setNote(p.petLine))
+  }, [])
+
+  const toggle = (kind: ReminderKind) => {
+    const running = !!prefs.reminders[kind]
+    const next = { ...prefs, reminders: { ...prefs.reminders, [kind]: !running } }
+    setPrefs(next)
+    savePrefs(next)
+    if (running) {
+      void request(IPC.REMINDER_STOP, { kind }).catch(() => {})
+    } else {
+      const payload: ReminderSetPayload = { kind }
+      void request(IPC.REMINDER_SET, payload).catch(() => {})
+    }
+  }
+
+  const setQuietHours = () => {
+    if (!quiet) return
+    const v = window.prompt('免打扰时段（如 22:00-09:00）', quiet.join('-'))
+    const m = v?.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/)
+    if (!m) return
+    const next: [string, string] = [m[1]!, m[2]!]
+    setQuiet(next)
+    // 整段覆盖 proactive 会丢其它字段，先取回再并（CONFIG_SET 浅合并语义）
+    void request<ConfigGetRes>(IPC.CONFIG_GET, {})
+      .then(({ config }) => {
+        const patch: Partial<Config> = { proactive: { ...config.proactive, quietHours: next } }
+        return request(IPC.CONFIG_SET, { patch })
+      })
+      .catch(() => {})
+  }
+
+  const mutateTodos = (next: TodoItem[]) => {
+    setTodos(next)
+    saveTodos(next)
+  }
+
+  const addTodo = () => {
+    const text = window.prompt('要记点什么？')
+    if (!text?.trim()) return
+    const time = new Date().toTimeString().slice(0, 5)
+    mutateTodos([...todos, { id: `${Date.now()}`, text: text.trim(), time, done: false }])
+  }
+
+  return (
+    <>
+      <div className="remind-grid">
+        {CARDS.map((c) => {
+          const running = !!prefs.reminders[c.kind]
+          return (
+            <div key={c.kind} className={`remind-card${c.kind === 'pomodoro' && running ? ' remind-card--active' : ''}`}>
+              <p className="remind-card-title">{c.title}</p>
+              <div className="remind-card-value">{c.value}</div>
+              <div className="remind-card-chips">
+                <span className={`chip ${running ? 'chip--doing' : 'chip--off'}`}>{running ? '进行中' : '已关闭'}</span>
+                <button className="chip" onClick={() => toggle(c.kind)}>
+                  {running ? '停止' : '开启'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        <div className="remind-card">
+          <p className="remind-card-title">免打扰时段</p>
+          <div className="remind-card-value remind-card-value--long">{quiet ? quiet.join('–') : '—'}</div>
+          <div className="remind-card-chips">
+            <span className="chip chip--on">已开启</span>
+            <button className="chip" onClick={setQuietHours}>
+              设置
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="section-head" style={{ marginTop: 12 }}>
+        Todo
+        <img
+          src={iconExpand}
+          alt="展开/收起"
+          style={todoOpen ? undefined : { transform: 'rotate(180deg)' }}
+          onClick={() => setTodoOpen((v) => !v)}
+        />
+      </div>
+      {todoOpen &&
+        todos.map((t) => (
+          <div key={t.id} className={`row${t.done ? ' row--done' : ''}`}>
+            <button
+              className="todo-check"
+              onClick={() => mutateTodos(todos.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
+            >
+              {t.done && <img src={iconCheck} alt="" />}
+            </button>
+            <span className="row-title">{t.text}</span>
+            <span className="row-time">{t.time}</span>
+            <button className="row-del" onClick={() => mutateTodos(todos.filter((x) => x.id !== t.id))}>
+              <img src={iconDelete} alt="删除" />
+            </button>
+          </div>
+        ))}
+      {todoOpen && todos.length === 0 && <div className="placeholder">还没有待办，点右下角 + 加一条～</div>}
+      {note && <div className="float-tooling" style={{ padding: '8px' }}>{note}</div>}
+      <button className="fab" onClick={addTodo} aria-label="新增待办">
+        +
+      </button>
+    </>
+  )
 }

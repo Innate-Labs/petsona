@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { IPC } from '@petsona/shared'
 import type { AuthStateChangedPayload, LoginRequestCodePayload, LoginSubmitPayload } from '@petsona/shared'
 import { IpcError, on, request } from '../lib/ipc'
+import { CHARACTER } from '../lib/character'
 
 export function Login() {
   const [step, setStep] = useState<'email' | 'code'>('email')
@@ -51,7 +52,7 @@ export function Login() {
 
   return (
     <div className="login">
-      <div className="login-face">😸</div>
+      <img className="login-face" src={CHARACTER.avatar} alt="宠物" style={{ borderRadius: 999 }} />
       <h1>宠格 Petsona</h1>
       <p className="login-hint">先登录，宠物才能记住你哦</p>
       {step === 'email' ? (

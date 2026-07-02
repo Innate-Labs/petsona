@@ -1,42 +1,47 @@
-// panel/Panel.tsx —— 主面板：左侧 tab 导航 + 登录态门控（§0 桌面强制登录）
+// panel/Panel.tsx —— 主面板：首页 2×2 直达四子页（Figma IA）+ 登录态门控（§0 桌面强制登录）
+// 审批/记忆不在 Figma 页面图内，保留深链与设置中心入口（Gate 流程不破坏）。
 
 import { useEffect, useState } from 'react'
 import { IPC } from '@petsona/shared'
 import type { AuthStateChangedPayload } from '@petsona/shared'
 import { on } from '../lib/ipc'
+import { loadProfile } from '../lib/local'
+import { PageShell } from './kit'
+import { Home } from './Home'
+import { PetData } from './PetData'
 import { Chat } from './Chat'
-import { Tasks } from './Tasks'
 import { Approval } from './Approval'
 import { MemoryManager } from './MemoryManager'
 import { Reminders } from './Reminders'
 import { Settings } from './Settings'
 import { Login } from './Login'
+import './panel.css'
 
-const TABS = [
-  { id: 'chat', label: '聊天' },
-  { id: 'tasks', label: '任务' },
-  { id: 'approval', label: '审批' },
-  { id: 'memory', label: '记忆' },
-  { id: 'reminders', label: '提醒' },
-  { id: 'settings', label: '设置' },
-] as const
-type TabId = (typeof TABS)[number]['id']
+const SUBPAGES = {
+  data: { title: '宠物数据', comp: PetData },
+  chat: { title: '对话记录', comp: Chat },
+  reminders: { title: '提醒事项', comp: Reminders },
+  settings: { title: '设置中心', comp: Settings },
+  approval: { title: '审批与撤销', comp: Approval },
+  memory: { title: '记忆管理', comp: MemoryManager },
+} as const
+type PageId = 'home' | keyof typeof SUBPAGES
 
-// 支持 open_panel(route) / 宠物菜单直达：#/panel/<tab>
-function tabFromHash(): TabId {
+// 深链兼容：#/panel/<page>；旧 tab id「tasks」并入提醒事项页
+function pageFromHash(): PageId {
   const seg = window.location.hash.split('/')[2] ?? ''
-  return TABS.some((t) => t.id === seg) ? (seg as TabId) : 'chat'
+  if (seg === 'tasks') return 'reminders'
+  return seg in SUBPAGES ? (seg as PageId) : 'home'
 }
 
 export function Panel() {
-  const [tab, setTab] = useState<TabId>(tabFromHash)
-  // 为什么默认 anon：消息表没有 AUTH_STATE_GET，初始态只能按未登录渲染，
-  // 依赖 harness 在 UI 桥接建立后主动广播一次 AUTH_STATE_CHANGED 放行（假设已在交付说明标注）
+  const [page, setPage] = useState<PageId>(pageFromHash)
+  // 默认 anon：初始态按未登录渲染，等 harness 广播 AUTH_STATE_CHANGED 放行
   const [auth, setAuth] = useState<AuthStateChangedPayload>({ loginState: 'anon' })
 
   useEffect(() => {
     const offAuth = on<AuthStateChangedPayload>(IPC.AUTH_STATE_CHANGED, setAuth)
-    const onHash = () => setTab(tabFromHash())
+    const onHash = () => setPage(pageFromHash())
     window.addEventListener('hashchange', onHash)
     return () => {
       offAuth()
@@ -44,35 +49,32 @@ export function Panel() {
     }
   }, [])
 
-  // 强制登录：未登录只给登录页，不渲染任何业务 tab
+  const nav = (p: string) => {
+    window.location.hash = p === 'home' ? '#/panel' : `#/panel/${p}`
+  }
+
   if (auth.loginState !== 'logged_in') {
     return (
-      <div className="panel panel--login">
+      <div className="panel-shell panel--login">
         <Login />
       </div>
     )
   }
 
+  if (page === 'home') {
+    return (
+      <PageShell petName={loadProfile().name}>
+        <Home nav={nav} />
+      </PageShell>
+    )
+  }
+
+  const def = SUBPAGES[page]
+  const Comp = def.comp
+
   return (
-    <div className="panel">
-      <nav className="panel-nav">
-        {TABS.map((t) => (
-          <button key={t.id} className={t.id === tab ? 'active' : ''} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-        <div className="panel-user" title={auth.email}>
-          {auth.email ?? ''}
-        </div>
-      </nav>
-      <main className="panel-main">
-        {tab === 'chat' && <Chat />}
-        {tab === 'tasks' && <Tasks />}
-        {tab === 'approval' && <Approval />}
-        {tab === 'memory' && <MemoryManager />}
-        {tab === 'reminders' && <Reminders />}
-        {tab === 'settings' && <Settings />}
-      </main>
-    </div>
+    <PageShell title={def.title} onBack={() => nav('home')}>
+      <Comp />
+    </PageShell>
   )
 }

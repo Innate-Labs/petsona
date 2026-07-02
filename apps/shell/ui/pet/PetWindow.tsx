@@ -11,11 +11,17 @@ import { EmotionMachine } from './EmotionMachine'
 import { Sprite } from './Sprite'
 import { Bubble } from './Bubble'
 
-const MENU: Array<{ route: string; label: string }> = [
-  { route: 'chat', label: '聊天' },
-  { route: 'tasks', label: '任务' },
-  { route: 'reminders', label: '提醒' },
-  { route: 'settings', label: '设置' },
+// 竖排图标菜单（Figma Frame 9 82:1922），图标复用组件库 glyph
+import glyphChat from '../assets/figma/icon-chat-32.svg'
+import glyphData from '../assets/figma/icon-data-24.svg'
+import glyphBell from '../assets/figma/icon-bell-24.svg'
+import glyphGear from '../assets/figma/icon-gear-24.svg'
+
+const MENU: Array<{ route: string; label: string; icon: string }> = [
+  { route: 'chat', label: '聊天', icon: glyphChat },
+  { route: 'data', label: '数据', icon: glyphData },
+  { route: 'reminders', label: '提醒', icon: glyphBell },
+  { route: 'settings', label: '设置', icon: glyphGear },
 ]
 
 export function PetWindow() {
@@ -76,12 +82,14 @@ export function PetWindow() {
     <div className="pet-window" onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       {bubble && <Bubble bubble={bubble} onDismiss={() => setBubble(null)} />}
       <div className="sprite-hit" onClick={onSpriteClick}>
-        <Sprite emotion={emotion} />
+        {/* 菜单打开时切「举手打招呼」帧，回应感来自 Figma 桌宠形态第 2 帧 */}
+        <Sprite emotion={emotion} wave={menuOpen} />
       </div>
       {menuOpen && (
         <div className="pet-menu">
           {MENU.map((m) => (
             <button key={m.route} onClick={(e) => openPanel(m.route, e)}>
+              <img src={m.icon} alt="" />
               {m.label}
             </button>
           ))}

@@ -1,4 +1,26 @@
-/* styles.css —— 暗色简洁；不引 UI 框架（M1 只求可用可调） */
+/* styles.css —— 奶油暖棕主题（Figma「测试」页面图+组件库定稿，规格见 DESIGN.md）
+   本文件：token + 基础 + 宠物窗 + 对话浮窗；面板页样式在 panel/panel.css */
+
+:root {
+  --bg-grad: linear-gradient(90deg, #fffdf8, #f7efe4);
+  --card-bg: #f0e7dd;
+  --card-active-grad: linear-gradient(109deg, #c99b72 0%, #e9bca0 96%);
+  --row-active: #f1ece6;
+  --text: #593200;
+  --text-sub: #8b6848;
+  --panel-border: #e5d8c8;
+  --chip-doing: #ffe4b3;
+  --chip-off: #ffd9c3;
+  --chip-on: #d5ffcf;
+  --danger-text: #ff7b7b;
+  --float-grad: linear-gradient(180deg, #fff8ee, #fff2e0);
+  --float-border: #f3e0c8;
+  --avatar-ring: #caa27f;
+  --user-bubble: #f6ebdd;
+  --shadow-window: 0 14px 34px rgba(92, 64, 48, 0.16);
+  --shadow-card: 0 12px 26px rgba(90, 57, 32, 0.12);
+  --shadow-input: 0 8px 4px #decdb4;
+}
 
 * {
   box-sizing: border-box;
@@ -6,29 +28,27 @@
 
 body {
   margin: 0;
-  /* 为什么透明：宠物窗是 NSPanel 透明置顶，面板窗由 data-route 补深色底 */
+  /* 为什么透明：宠物窗/浮窗是 NSPanel 透明置顶；面板窗由 data-route 补奶油底 */
   background: transparent;
-  color: #e6e6ef;
-  font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
-  font-size: 14px;
+  color: var(--text);
+  font-family: 'PingFang SC', -apple-system, 'Helvetica Neue', system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
 }
 
 body[data-route='panel'] {
-  background: #14141b;
+  /* 浏览器原型里面板外露出中性底；Tauri 窗内 .panel-shell 占满视口，看不到这层 */
+  background: #e9e1d3;
 }
 
 button {
   font: inherit;
-  color: inherit;
-  background: #262633;
-  border: 1px solid #3a3a4c;
-  border-radius: 8px;
-  padding: 6px 14px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--float-border);
+  border-radius: 999px;
+  padding: 5px 14px;
   cursor: pointer;
-}
-
-button:hover {
-  background: #32324a;
 }
 
 button:disabled {
@@ -40,21 +60,72 @@ input,
 textarea,
 select {
   font: inherit;
-  color: inherit;
-  background: #1d1d28;
-  border: 1px solid #3a3a4c;
-  border-radius: 8px;
-  padding: 8px 10px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 8px 12px;
   outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #999;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: #6c6cf5;
+  border-color: var(--avatar-ring);
 }
 
-/* ---------- 宠物窗口 ---------- */
+/* ---------- 通用小件 ---------- */
+
+/* 药丸 chip：状态/设置按钮共用（组件库「状态」「开关」54×28） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text-sub);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip--doing {
+  background: var(--chip-doing);
+}
+.chip--off {
+  background: var(--chip-off);
+  color: var(--text);
+}
+.chip--on {
+  background: var(--chip-on);
+  color: var(--text);
+}
+
+/* 头像圆环（组件库「宠物头像」：#caa27f 底 + #f3e0c8 环 + sprite 帧裁切） */
+.avatar {
+  border-radius: 999px;
+  background: var(--avatar-ring);
+  border: 1px solid var(--float-border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---------- 宠物窗口（NSPanel 透明置顶） ---------- */
 
 .pet-window {
   height: 100vh;
@@ -62,27 +133,47 @@ select:focus {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 6px;
   user-select: none;
   -webkit-user-select: none;
   cursor: grab;
   overflow: hidden;
 }
 
+/* sprite：图集与帧位全部由 lib/character.ts 内联注入（角色可插拔），CSS 只管盒子与动效 */
 .sprite {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  border: 2px solid transparent;
-  animation: breathe 3.2s ease-in-out infinite; /* 待机呼吸 */
+  position: relative;
+  width: 120px;
+  height: 120px;
+  animation: breathe 3.2s ease-in-out infinite;
 }
 
-.sprite-face {
-  font-size: 56px;
-  line-height: 1;
+.sprite-img {
+  width: 100%;
+  height: 100%;
+}
+
+/* 动作视频：透明底 webm/mov，等比装入盒子 */
+.sprite-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: transparent;
+  pointer-events: none; /* 点击穿透给 .sprite-hit，拖动/菜单手势不被 video 吃掉 */
+}
+
+/* 地面椭圆影（Figma Ellipse 3） */
+.sprite-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(89, 50, 0, 0.22) 0%, transparent 70%);
 }
 
 @keyframes breathe {
@@ -91,59 +182,69 @@ select:focus {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.06);
+    transform: scale(1.04);
   }
 }
 
-/* 六态色块：正式美术 M2 替换 */
-.sprite--happy {
-  background: rgba(249, 168, 37, 0.28);
-  border-color: #f9a825;
-}
-.sprite--angry {
-  background: rgba(229, 57, 53, 0.28);
-  border-color: #e53935;
-}
-.sprite--sad {
-  background: rgba(92, 107, 192, 0.28);
-  border-color: #5c6bc0;
-}
-.sprite--anxious {
-  background: rgba(255, 112, 67, 0.28);
-  border-color: #ff7043;
-}
-.sprite--calm {
-  background: rgba(77, 182, 172, 0.28);
-  border-color: #4db6ac;
-}
-.sprite--unknown {
-  background: rgba(120, 144, 156, 0.28);
-  border-color: #78909c;
+/* 情绪徽标：Figma「情绪-单独」45×18 文字 chip（🥳 开心） */
+.sprite-emotion {
+  position: absolute;
+  top: -2px;
+  right: -8px;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: rgba(255, 253, 248, 0.9);
+  color: var(--text);
+  white-space: nowrap;
+  box-shadow: var(--shadow-card);
 }
 
+/* 宠物菜单：Figma Frame 9 竖排 66×152 —— 圆底图标+文字，奶油浮层 */
 .pet-menu {
   display: flex;
-  gap: 6px;
-  background: rgba(24, 24, 33, 0.92);
-  border: 1px solid #3a3a4c;
-  border-radius: 10px;
-  padding: 6px;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--float-grad);
+  border: 1px solid var(--float-border);
+  border-radius: 18px;
+  padding: 8px;
+  box-shadow: var(--shadow-card);
 }
 
 .pet-menu button {
-  padding: 4px 10px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
 }
 
-/* ---------- 气泡 ---------- */
+.pet-menu button:hover {
+  background: var(--row-active);
+}
+
+.pet-menu button img {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- 宠物气泡（tooltip 25:2608 风格） ---------- */
 
 .bubble {
   max-width: 240px;
-  background: rgba(24, 24, 33, 0.94);
-  border: 1px solid #3a3a4c;
-  border-left-width: 4px;
-  border-radius: 10px;
+  background: var(--float-grad);
+  border: 1px solid var(--float-border);
+  border-radius: 18px;
   padding: 10px 12px;
+  color: var(--text);
+  box-shadow:
+    inset 0 3px 1px #fff,
+    var(--shadow-card);
 }
 
 .bubble-text {
@@ -163,246 +264,179 @@ select:focus {
   font-size: 12px;
 }
 
-/* kind 样式区分（§3.1 BubbleKind） */
+/* kind 左侧细条区分（§3.1 BubbleKind），色相取暖色系不破坏奶油风 */
 .bubble--reply {
-  border-left-color: #4db6ac;
+  border-left: 4px solid #c99b72;
 }
 .bubble--proactive {
-  border-left-color: #ba68c8;
+  border-left: 4px solid #e9bca0;
 }
 .bubble--task {
-  border-left-color: #4fc3f7;
+  border-left: 4px solid #caa27f;
 }
 .bubble--reminder {
-  border-left-color: #ffd54f;
+  border-left: 4px solid #ffd9a0;
 }
 .bubble--approval {
-  border-left-color: #ff8a65;
+  border-left: 4px solid var(--danger-text);
 }
 
-/* ---------- 面板 ---------- */
+/* ---------- 对话浮窗（Group12/54：300×425 圆角36） ---------- */
 
-.panel {
-  display: flex;
-  height: 100vh;
-}
-
-.panel--login {
-  align-items: center;
-  justify-content: center;
-}
-
-.panel-nav {
-  width: 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 8px;
-  border-right: 1px solid #26263a;
-}
-
-.panel-nav button {
+body[data-route='float'] {
   background: transparent;
-  border: none;
-  text-align: left;
-  padding: 8px 12px;
-  border-radius: 8px;
-  color: #a5a5bd;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
 }
 
-.panel-nav button:hover {
-  background: #22222f;
-}
-
-.panel-nav button.active {
-  background: #2c2c44;
-  color: #fff;
-}
-
-.panel-user {
-  margin-top: auto;
-  font-size: 11px;
-  color: #6d6d85;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.panel-main {
-  flex: 1;
-  overflow: hidden;
-}
-
-.placeholder {
-  padding: 24px;
-  color: #8a8aa3;
-}
-
-/* ---------- 聊天 ---------- */
-
-.chat {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.chat-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.chat-msg {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  max-width: 76%;
-}
-
-.chat-msg--user {
-  align-self: flex-end;
-  align-items: flex-end;
-}
-
-.chat-bubble {
-  background: #22222f;
-  border-radius: 12px;
-  padding: 8px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.chat-msg--user .chat-bubble {
-  background: #3d3d68;
-}
-
-.chat-msg--error .chat-bubble {
-  background: rgba(229, 57, 53, 0.16);
-  border: 1px solid #e53935;
-  color: #ff9e9b;
-}
-
-.chat-tooling {
-  font-size: 12px;
-  color: #7d7d95;
-  margin-top: 3px;
-}
-
-.chat-cursor {
-  animation: blink 1s steps(2) infinite;
-}
-
-@keyframes blink {
-  to {
-    visibility: hidden;
-  }
-}
-
-.chat-input {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid #26263a;
-}
-
-.chat-input input {
-  flex: 1;
-}
-
-/* ---------- 登录 ---------- */
-
-.login {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+.float-chat {
+  position: relative;
   width: 300px;
-  text-align: center;
+  height: 425px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--float-border);
+  border-radius: 36px;
+  background: var(--float-grad);
+  box-shadow:
+    inset 0 5px 2px #fff,
+    0 8px 16px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
 }
 
-.login-face {
-  font-size: 56px;
+.float-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 50px;
+  padding: 0 14px;
+  flex-shrink: 0;
 }
 
-.login h1 {
-  font-size: 20px;
-  margin: 0;
+.float-head .avatar {
+  width: 32px;
+  height: 32px;
 }
 
-.login-hint {
-  color: #8a8aa3;
-  margin: 0;
+.float-head-name {
+  font-size: 13px;
+  color: var(--text);
 }
 
-.login-form {
+.float-head-spacer {
+  flex: 1;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  padding: 2px;
+  display: grid;
+  place-items: center;
+}
+
+.icon-btn img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.float-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
 }
 
-.login-err {
-  color: #ff9e9b;
-  margin: 0;
+/* 宠物消息：无底色直排；用户消息：#f6ebdd 药丸右对齐（Figma 82:1990/82:1993） */
+.float-msg {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  max-width: 252px;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
-button.link {
-  background: none;
-  border: none;
-  color: #8a8aa3;
-  text-decoration: underline;
+.float-msg--user {
+  align-self: flex-end;
+  background: var(--user-bubble);
+  border-radius: 999px;
+  padding: 8px 12px;
 }
 
-/* ---------- 设置 ---------- */
-
-.settings {
-  padding: 20px 24px;
-  max-width: 520px;
-  overflow-y: auto;
-  height: 100%;
+.float-msg--error {
+  color: var(--danger-text);
 }
 
-.settings h2 {
-  margin: 0 0 16px;
-  font-size: 18px;
+.float-tooling {
+  font-size: 11px;
+  color: var(--text-sub);
 }
 
-.field {
+/* 超级输入框（32:3857：284×80 白卡圆角27 + #decdb4 投影） */
+.super-input {
+  flex-shrink: 0;
+  margin: 8px auto 12px;
+  width: 284px;
+  background: #fff;
+  border-radius: 27px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 14px;
+  box-shadow: var(--shadow-input);
 }
 
-.field > span {
-  color: #a5a5bd;
+.super-input textarea {
+  border: none;
+  padding: 0;
+  resize: none;
+  height: 36px;
   font-size: 13px;
+  line-height: 18px;
+  border-radius: 0;
 }
 
-.field--row {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-
-.field input.narrow {
-  width: 80px;
-}
-
-.settings-actions {
+.super-input-row {
   display: flex;
-  gap: 10px;
-  margin-top: 6px;
+  align-items: center;
+  justify-content: space-between;
 }
 
-button.danger {
-  border-color: #7a3038;
-  color: #ff9e9b;
+/* 「总结网页」pill：M1 置灰占位（read_context 屏幕问答 M2） */
+.super-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px 0 2px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #bdbdbd;
+  font-size: 12px;
 }
 
-.settings-note {
-  color: #8a8aa3;
+.super-pill img {
+  width: 24px;
+  height: 24px;
+}
+
+.send-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.send-btn img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }

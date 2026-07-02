@@ -1,15 +1,17 @@
-// main.tsx —— 双入口 hash 路由：#/pet 宠物窗 / #/panel 面板窗（默认）
-// 为什么用 hash 而非 router 库：只有两个窗口级入口，引路由库纯属浪费体积。
+// main.tsx —— 窗口级 hash 路由：#/pet 宠物窗 / #/float 对话浮窗 / #/panel 面板窗（默认）
+// 为什么用 hash 而非 router 库：入口只有窗口数个，引路由库纯属浪费体积。
 
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PetWindow } from './pet/PetWindow'
+import { FloatChat } from './float/FloatChat'
 import { Panel } from './panel/Panel'
 import './styles.css'
 
-type Route = 'pet' | 'panel'
+type Route = 'pet' | 'float' | 'panel'
 
-const routeFromHash = (): Route => (window.location.hash.startsWith('#/pet') ? 'pet' : 'panel')
+const routeFromHash = (): Route =>
+  window.location.hash.startsWith('#/pet') ? 'pet' : window.location.hash.startsWith('#/float') ? 'float' : 'panel'
 
 function App() {
   const [route, setRoute] = useState<Route>(routeFromHash)
@@ -25,7 +27,7 @@ function App() {
     document.body.dataset.route = route
   }, [route])
 
-  return route === 'pet' ? <PetWindow /> : <Panel />
+  return route === 'pet' ? <PetWindow /> : route === 'float' ? <FloatChat /> : <Panel />
 }
 
 createRoot(document.getElementById('root')!).render(<App />)
