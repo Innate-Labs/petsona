@@ -40,6 +40,7 @@ export type DataPaths = {
   plansDir: string
   undoDir: string
   scheduled: string
+  proactive: string     // 主动气泡历史（p02 频控与语义去重跨重启存活）
   outputsDir: string
   logsDir: string
   auditLog: string
@@ -62,6 +63,7 @@ export function resolvePaths(userId: string): DataPaths {
     plansDir: join(root, 'plans'),
     undoDir: join(root, 'undo'),
     scheduled: join(root, 'scheduled.json'),
+    proactive: join(root, 'proactive.json'),
     outputsDir: join(root, 'outputs'),
     logsDir: join(root, 'logs'),
     auditLog: join(root, 'logs/audit.jsonl'),
