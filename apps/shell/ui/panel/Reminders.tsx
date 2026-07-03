@@ -9,6 +9,7 @@ import type { Config, ConfigGetRes, ReminderFiredPayload, ReminderKind, Reminder
 import { on, request } from '../lib/ipc'
 import { loadPrefs, loadTodos, savePrefs, saveTodos } from '../lib/local'
 import type { TodoItem } from '../lib/local'
+import { useDialog } from './kit'
 import iconExpand from '../assets/figma/icon-expand-18.svg'
 import iconDelete from '../assets/figma/icon-delete-28.svg'
 import iconCheck from '../assets/figma/icon-check.svg'
@@ -27,6 +28,7 @@ export function Reminders() {
   const [quiet, setQuiet] = useState<[string, string] | null>(null)
   const [todoOpen, setTodoOpen] = useState(true)
   const [note, setNote] = useState('')
+  const dialog = useDialog()
 
   useEffect(() => {
     void request<ConfigGetRes>(IPC.CONFIG_GET, {})
@@ -51,16 +53,18 @@ export function Reminders() {
 
   const setQuietHours = () => {
     if (!quiet) return
-    const v = window.prompt('免打扰时段（如 22:00-09:00）', quiet.join('-'))
-    const m = v?.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/)
-    if (!m) return
-    const next: [string, string] = [m[1]!, m[2]!]
-    setQuiet(next)
-    // 整段覆盖 proactive 会丢其它字段，先取回再并（CONFIG_SET 浅合并语义）
-    void request<ConfigGetRes>(IPC.CONFIG_GET, {})
-      .then(({ config }) => {
-        const patch: Partial<Config> = { proactive: { ...config.proactive, quietHours: next } }
-        return request(IPC.CONFIG_SET, { patch })
+    void dialog
+      .prompt({ title: '免打扰时段（如 22:00-09:00）', defaultValue: quiet.join('-'), placeholder: '22:00-09:00' })
+      .then((v) => {
+        const m = v?.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/)
+        if (!m) return
+        const next: [string, string] = [m[1]!, m[2]!]
+        setQuiet(next)
+        // 整段覆盖 proactive 会丢其它字段，先取回再并（CONFIG_SET 浅合并语义）
+        return request<ConfigGetRes>(IPC.CONFIG_GET, {}).then(({ config }) => {
+          const patch: Partial<Config> = { proactive: { ...config.proactive, quietHours: next } }
+          return request(IPC.CONFIG_SET, { patch })
+        })
       })
       .catch(() => {})
   }
@@ -71,10 +75,11 @@ export function Reminders() {
   }
 
   const addTodo = () => {
-    const text = window.prompt('要记点什么？')
-    if (!text?.trim()) return
-    const time = new Date().toTimeString().slice(0, 5)
-    mutateTodos([...todos, { id: `${Date.now()}`, text: text.trim(), time, done: false }])
+    void dialog.prompt({ title: '要记点什么？', placeholder: '待办内容' }).then((text) => {
+      if (!text?.trim()) return
+      const time = new Date().toTimeString().slice(0, 5)
+      mutateTodos([...todos, { id: `${Date.now()}`, text: text.trim(), time, done: false }])
+    })
   }
 
   return (

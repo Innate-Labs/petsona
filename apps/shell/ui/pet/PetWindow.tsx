@@ -1,4 +1,11 @@
-// pet/PetWindow.tsx —— 悬浮宠物窗口：Sprite + Bubble + 整窗拖动 + 点击菜单（§4 悬浮宠物窗口行）
+// pet/PetWindow.tsx —— 悬浮宠物窗口：Sprite + Bubble + 整窗拖动 + 单击 wave / 双击开面板（§4 悬浮宠物窗口行）
+//
+// 交互契约（第三轮真机验收后修订，替代前一版四选项菜单）：
+//   · 单击（无拖动）→ 播放 wave 动作视频 WAVE_MS，一次性回落 sit；不弹菜单，不上移。
+//   · 双击           → 打开主面板（走 open_panel('panel')）；同时不触发 wave 的开面板体验也自然。
+//   · 拖拽（>4px）   → 整窗随鼠标移动，同时触发 wave 让宠物「有反应」。
+// 契约文档 §4 原写「点击菜单」，第三轮改为「单击=动作、双击=开面板」——菜单会导致宠物 flex 上移
+// 只剩下半身，且无 macOS 右键补位手段；用单/双击更直接。
 
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
@@ -11,18 +18,10 @@ import { EmotionMachine } from './EmotionMachine'
 import { Sprite } from './Sprite'
 import { Bubble } from './Bubble'
 
-// 竖排图标菜单（Figma Frame 9 82:1922），图标复用组件库 glyph
-import glyphChat from '../assets/figma/icon-chat-32.svg'
-import glyphData from '../assets/figma/icon-data-24.svg'
-import glyphBell from '../assets/figma/icon-bell-24.svg'
-import glyphGear from '../assets/figma/icon-gear-24.svg'
-
-const MENU: Array<{ route: string; label: string; icon: string }> = [
-  { route: 'chat', label: '聊天', icon: glyphChat },
-  { route: 'data', label: '数据', icon: glyphData },
-  { route: 'reminders', label: '提醒', icon: glyphBell },
-  { route: 'settings', label: '设置', icon: glyphGear },
-]
+// wave 动作视频约 3~4s，取 3500ms 让循环播 1~2 次自然收尾
+const WAVE_MS = 3500
+// 双击窗口：>1x 的单击间隔就归为「继续挑逗」，触发多次 wave；<= 视为双击开面板
+const DOUBLE_CLICK_MS = 260
 
 export function PetWindow() {
   // 为什么放 ref 不放 state：状态机实例要跨渲染存活，重建会丢驻留计时与切换额度
@@ -32,9 +31,20 @@ export function PetWindow() {
 
   const [emotion, setEmotion] = useState<Emotion>(machine.getState())
   const [bubble, setBubble] = useState<PetBubblePayload | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [waving, setWaving] = useState(false)
   // 为什么记 press 起点：区分「拖动」与「点击」——startDragging 一旦触发，webview 收不到后续 click
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
+  const waveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clickPending = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const triggerWave = () => {
+    setWaving(true)
+    if (waveTimer.current !== null) clearTimeout(waveTimer.current)
+    waveTimer.current = setTimeout(() => {
+      waveTimer.current = null
+      setWaving(false)
+    }, WAVE_MS)
+  }
 
   useEffect(() => {
     const unsubs = [
@@ -46,7 +56,11 @@ export function PetWindow() {
       on(IPC.CHAT_ERROR, () => machine.markTurn()),
       on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble),
     ]
-    return () => unsubs.forEach((u) => u())
+    return () => {
+      unsubs.forEach((u) => u())
+      if (waveTimer.current !== null) clearTimeout(waveTimer.current)
+      if (clickPending.current !== null) clearTimeout(clickPending.current)
+    }
   }, [machine])
 
   const onMouseDown = (e: MouseEvent) => {
@@ -57,45 +71,48 @@ export function PetWindow() {
   const onMouseMove = (e: MouseEvent) => {
     const p = press.current
     if (!p || p.dragging || e.buttons === 0) return
-    // 契约偏差说明：契约写「mousedown 即 startDragging」，但那样 click 永远不触发、菜单打不开；
+    // 契约偏差说明：契约写「mousedown 即 startDragging」，但那样 click 永远不触发、双击也吃不到；
     // 折中为位移 >4px 才开始整窗拖动，点按手感不变，拖动无感知差异。
     if (Math.abs(e.screenX - p.x) + Math.abs(e.screenY - p.y) > 4) {
       p.dragging = true
+      triggerWave() // 拖动本身也是「被挑逗」，接 wave 让宠物有反应（修①）
       if (isTauri()) void getCurrentWindow().startDragging()
     }
   }
 
-  const onSpriteClick = () => {
-    if (press.current?.dragging) return // 拖动收尾的残留 click，不当点击处理
-    setMenuOpen((v) => !v)
-  }
-
-  const openPanel = (route: string, e: MouseEvent) => {
-    setMenuOpen(false)
+  const openMainPanel = (e: MouseEvent) => {
     const payload: PetPositionPayload = { position: { x: e.screenX, y: e.screenY } }
     send(IPC.PET_CLICKED, payload)
-    if (isTauri() && route === 'chat') void invoke('open_float_chat')
-    else if (isTauri()) void invoke('open_panel', { route })
-    else window.location.hash = `#/panel/${route}` // 浏览器降级：同窗切到面板路由
+    if (isTauri()) void invoke('open_panel', { route: 'panel' })
+    else window.location.hash = '#/panel' // 浏览器降级
+  }
+
+  // React 的 onClick + onDoubleClick 会分别触发两次 onClick + 一次 onDoubleClick；
+  // 用 setTimeout 延后单击效果，dblclick 到达时取消，做到「单双击互斥」。
+  const onSpriteClick = (_e: MouseEvent) => {
+    if (press.current?.dragging) return // 拖动收尾的残留 click，不当点击处理
+    if (clickPending.current !== null) clearTimeout(clickPending.current)
+    clickPending.current = setTimeout(() => {
+      clickPending.current = null
+      triggerWave()
+    }, DOUBLE_CLICK_MS)
+  }
+
+  const onSpriteDoubleClick = (e: MouseEvent) => {
+    if (clickPending.current !== null) {
+      clearTimeout(clickPending.current)
+      clickPending.current = null
+    }
+    openMainPanel(e)
   }
 
   return (
     <div className="pet-window" onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       {bubble && <Bubble bubble={bubble} onDismiss={() => setBubble(null)} />}
-      <div className="sprite-hit" onClick={onSpriteClick}>
-        {/* 菜单打开时切「举手打招呼」帧，回应感来自 Figma 桌宠形态第 2 帧 */}
-        <Sprite emotion={emotion} wave={menuOpen} />
+      <div className="sprite-hit" onClick={onSpriteClick} onDoubleClick={onSpriteDoubleClick}>
+        {/* wave 期间切「举手打招呼」动作视频；WAVE_MS 后回落 sit（EMOTION_META.pose） */}
+        <Sprite emotion={emotion} wave={waving} />
       </div>
-      {menuOpen && (
-        <div className="pet-menu">
-          {MENU.map((m) => (
-            <button key={m.route} onClick={(e) => openPanel(m.route, e)}>
-              <img src={m.icon} alt="" />
-              {m.label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

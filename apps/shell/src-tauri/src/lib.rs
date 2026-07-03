@@ -11,6 +11,11 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 const FLOAT_WIDTH: f64 = 300.0;
 const FLOAT_HEIGHT: f64 = 425.0;
 const FLOAT_GAP: f64 = 12.0;
+// 面板窗口尺寸（第三轮真机验收后修订）：
+//   原 920×640 是「iframe 预览 + 手机 max-width 420 居中」的产物，两侧 500px 大留白。
+//   改为直接贴内容宽度 440（面板壳撑满）× 高度 560（首页 hero+2×2 卡+新增输入框 + 头脚 74）。
+const PANEL_WIDTH: f64 = 440.0;
+const PANEL_HEIGHT: f64 = 560.0;
 
 /// 打开/聚焦面板窗口（宠物菜单与托盘共用）
 /// 面板子页 hash 是 #/panel/<page>（Panel.tsx 按 split('/')[2] 取页名），
@@ -37,7 +42,7 @@ fn open_panel(app: AppHandle, route: Option<String>) {
     // 首次打开也要带上子页，否则深链在窗口创建路径上丢失
     let _ = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(format!("index.html{hash}").into()))
         .title("宠格 Petsona")
-        .inner_size(920.0, 640.0)
+        .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
         .build();
 }
 

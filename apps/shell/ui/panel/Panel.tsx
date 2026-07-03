@@ -6,7 +6,7 @@ import { IPC } from '@petsona/shared'
 import type { AuthStateChangedPayload } from '@petsona/shared'
 import { on, request } from '../lib/ipc'
 import { loadProfile } from '../lib/local'
-import { PageShell } from './kit'
+import { ModalHost, PageShell } from './kit'
 import { Home } from './Home'
 import { PetData } from './PetData'
 import { Chat } from './Chat'
@@ -59,17 +59,21 @@ export function Panel() {
 
   if (auth.loginState !== 'logged_in') {
     return (
-      <div className="panel-shell panel--login">
-        <Login />
-      </div>
+      <ModalHost>
+        <div className="panel-shell panel--login">
+          <Login />
+        </div>
+      </ModalHost>
     )
   }
 
   if (page === 'home') {
     return (
-      <PageShell petName={loadProfile().name}>
-        <Home nav={nav} />
-      </PageShell>
+      <ModalHost>
+        <PageShell petName={loadProfile().name}>
+          <Home nav={nav} />
+        </PageShell>
+      </ModalHost>
     )
   }
 
@@ -77,8 +81,10 @@ export function Panel() {
   const Comp = def.comp
 
   return (
-    <PageShell title={def.title} onBack={() => nav('home')}>
-      <Comp />
-    </PageShell>
+    <ModalHost>
+      <PageShell title={def.title} onBack={() => nav('home')}>
+        <Comp />
+      </PageShell>
+    </ModalHost>
   )
 }

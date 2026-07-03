@@ -1,9 +1,10 @@
 /* panel/panel.css —— 面板五页（首页/宠物数据/对话记录/提醒事项/设置中心）样式，规格见 ../DESIGN.md */
 
-/* 面板壳：Figma 帧 337×551 等比放大到窗口；浏览器里限宽居中即是响应式原型 */
+/* 面板壳：Figma 帧 337×551 是手机原型比例；Tauri 桌面窗改为撑满窗口（宽度由 lib.rs 的 inner_size 定），
+   浏览器原型里 max-width 限宽居中以保留手机预览。为什么用 media-min 而不是永久 max-width：
+   桌面窗口就是外壳，两侧不该有奶油底外的留白；预览器 iframe 里才需要边距，用宽度断点区分。 */
 .panel-shell {
   width: 100%;
-  max-width: 420px;
   height: 100vh;
   margin: 0 auto;
   display: flex;
@@ -11,6 +12,13 @@
   background: var(--bg-grad);
   box-shadow: var(--shadow-window);
   overflow: hidden;
+}
+
+@media (min-width: 600px) {
+  /* 浏览器原型：宽窗口下限 420 手机比例居中，Tauri 窗口 <600px 走上面的撑满分支 */
+  .panel-shell {
+    max-width: 420px;
+  }
 }
 
 /* ---------- 页头/页脚（组件库 页头 32:4143 / 页脚 32:4008） ---------- */
@@ -193,6 +201,39 @@
   font-weight: 500;
   color: var(--text);
   line-height: 26px;
+}
+
+/* 首页快捷输入框（Figma 未收录，第三轮验收增补）：与 float super-input 白卡同款，横排 send */
+.home-quick {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: var(--shadow-input);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-quick-input {
+  flex: 1;
+  border: none;
+  padding: 0;
+  resize: none;
+  height: 22px;
+  min-height: 22px;
+  font-size: 13px;
+  line-height: 22px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.home-quick-input:focus {
+  border: none;
+}
+
+.home-quick .send-btn {
+  flex-shrink: 0;
 }
 
 /* ---------- 列表行（对话记录 25:3485 / todo 33:1369：h36 圆角16） ---------- */
@@ -715,6 +756,59 @@ button.link {
 @keyframes blink {
   to {
     visibility: hidden;
+  }
+}
+
+/* ---------- 自绘 Prompt / Confirm（替代 WKWebView 里失灵的 window.prompt/confirm/alert） ---------- */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(46, 30, 15, 0.32);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: modal-fade-in 120ms ease-out;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 280px;
+  background: var(--float-grad);
+  border: 1px solid var(--float-border);
+  border-radius: 20px;
+  padding: 18px 18px 14px;
+  box-shadow: inset 0 3px 1px #fff, var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.modal-card input {
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

@@ -2,8 +2,9 @@
 // SPEC-GAP: Figma 稿含「今日/历史对话」会话列表，M1 harness 无多会话域，先渲染单线程；
 // 会话列表随 M2 会话管理落地。
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useChat } from '../lib/useChat'
+import { popChatSeed } from '../lib/chatSeed'
 import iconSend from '../assets/figma/icon-send-hover-28.svg'
 import iconSendGray from '../assets/figma/icon-send-gray-28.svg'
 import pillCircle from '../assets/figma/pill-circle-29.svg'
@@ -11,6 +12,15 @@ import pillCircle from '../assets/figma/pill-circle-29.svg'
 export function Chat() {
   const { msgs, listRef, sendText } = useChat()
   const [input, setInput] = useState('')
+  // React 18 严格模式下 useEffect 会挂载→卸载→再挂载；用 ref 保证 seed 只消费一次
+  const seedConsumed = useRef(false)
+
+  useEffect(() => {
+    if (seedConsumed.current) return
+    seedConsumed.current = true
+    const seed = popChatSeed()
+    if (seed) sendText(seed)
+  }, [sendText])
 
   const submit = () => {
     if (sendText(input)) setInput('')

@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { loadProfile, saveProfile } from '../lib/local'
 import type { PetProfile } from '../lib/local'
-import { PetAvatar } from './kit'
+import { PetAvatar, useDialog } from './kit'
 import iconEdit from '../assets/figma/icon-edit-18.svg'
 import iconRow from '../assets/figma/icon-row-28.svg'
 import iconChevron from '../assets/figma/icon-chevron-12.svg'
@@ -26,6 +26,7 @@ const ROWS: RowDef[] = [
 
 export function PetData() {
   const [profile, setProfile] = useState(loadProfile)
+  const dialog = useDialog()
 
   const update = (patch: Partial<PetProfile>) => {
     const next = { ...profile, ...patch }
@@ -42,14 +43,16 @@ export function PetData() {
   }
 
   const rename = () => {
-    const name = window.prompt('给宠物起个新名字', profile.name)
-    if (name?.trim()) update({ name: name.trim() })
+    void dialog.prompt({ title: '给宠物起个新名字', defaultValue: profile.name }).then((name) => {
+      if (name?.trim()) update({ name: name.trim() })
+    })
   }
 
   const editValue = (row: RowDef) => {
     if (row.options) return cycle(row)
-    const v = window.prompt(row.label, profile[row.key] as string)
-    if (v?.trim()) update({ [row.key]: v.trim() } as Partial<PetProfile>)
+    void dialog.prompt({ title: row.label, defaultValue: profile[row.key] as string }).then((v) => {
+      if (v?.trim()) update({ [row.key]: v.trim() } as Partial<PetProfile>)
+    })
   }
 
   return (
@@ -83,7 +86,10 @@ export function PetData() {
         ))}
       </div>
       {/* 形象上传：正式美术资产 M2（v3.0 A.4），先给可点反馈不做假上传 */}
-      <button className="long-btn" onClick={() => window.alert('宠物形象上传在 M2 和正式美术一起交付喵～')}>
+      <button
+        className="long-btn"
+        onClick={() => void dialog.alert({ title: '宠物形象上传在 M2 和正式美术一起交付喵～' })}
+      >
         重新上传宠物形象
       </button>
     </>

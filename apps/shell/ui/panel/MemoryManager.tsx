@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { IPC } from '@petsona/shared'
 import type { ColdItemMeta, ColdType, MemoryGetRes, MemoryListGetRes } from '@petsona/shared'
 import { request } from '../lib/ipc'
+import { useDialog } from './kit'
 
 const TYPE_TABS: { key: ColdType | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
@@ -26,6 +27,7 @@ export function MemoryManager() {
   const [tab, setTab] = useState<ColdType | 'all'>('all')
   const [items, setItems] = useState<ColdItemMeta[]>([])
   const [note, setNote] = useState('')
+  const dialog = useDialog()
 
   const reload = useCallback((t: ColdType | 'all') => {
     void request<MemoryListGetRes>(IPC.MEMORY_LIST_GET, t === 'all' ? {} : { type: t })
@@ -36,29 +38,36 @@ export function MemoryManager() {
   useEffect(() => reload(tab), [tab, reload])
 
   const del = (name: string) => {
-    if (!window.confirm(`删掉这条记忆？\n${name}`)) return
-    void request(IPC.MEMORY_DELETE, { name })
-      .then(() => reload(tab))
-      .catch((e) => setNote(`删除失败：${e instanceof Error ? e.message : e}`))
+    void dialog.confirm({ title: `删掉这条记忆？\n${name}`, danger: true, okText: '删除' }).then((ok) => {
+      if (!ok) return
+      void request(IPC.MEMORY_DELETE, { name })
+        .then(() => reload(tab))
+        .catch((e) => setNote(`删除失败：${e instanceof Error ? e.message : e}`))
+    })
   }
 
   const edit = (name: string) => {
     // 先拉全文再编辑：gist 是 40 字截断，直接改会丢内容
     void request<MemoryGetRes>(IPC.MEMORY_GET, { name })
-      .then(({ item }) => {
-        const body = window.prompt('编辑记忆内容', item.body)
-        if (body === null || body.trim() === '' || body === item.body) return
-        return request(IPC.MEMORY_EDIT, { name, body: body.trim() }).then(() => reload(tab))
-      })
+      .then(({ item }) =>
+        dialog.prompt({ title: '编辑记忆内容', defaultValue: item.body }).then((body) => {
+          if (body === null || body.trim() === '' || body === item.body) return
+          return request(IPC.MEMORY_EDIT, { name, body: body.trim() }).then(() => reload(tab))
+        }),
+      )
       .catch((e) => setNote(`编辑失败：${e instanceof Error ? e.message : e}`))
   }
 
   const clear = () => {
     const scopeLabel = TYPE_TABS.find((t) => t.key === tab)!.label
-    if (!window.confirm(`清空「${scopeLabel}」分类下的全部记忆？此操作即时生效。`)) return
-    void request(IPC.MEMORY_CLEAR, { scope: tab === 'all' ? 'all' : tab })
-      .then(() => reload(tab))
-      .catch((e) => setNote(`清空失败：${e instanceof Error ? e.message : e}`))
+    void dialog
+      .confirm({ title: `清空「${scopeLabel}」分类下的全部记忆？此操作即时生效。`, danger: true, okText: '清空' })
+      .then((ok) => {
+        if (!ok) return
+        void request(IPC.MEMORY_CLEAR, { scope: tab === 'all' ? 'all' : tab })
+          .then(() => reload(tab))
+          .catch((e) => setNote(`清空失败：${e instanceof Error ? e.message : e}`))
+      })
   }
 
   return (
