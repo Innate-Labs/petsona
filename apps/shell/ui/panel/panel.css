@@ -937,3 +937,63 @@ button.danger {
 .settings-note {
   color: var(--text-sub);
 }
+
+/* ---------- 新版分区式设置页（AI Key / 陪伴节奏 / 文件权限 / 账号 / 快捷 / 进阶） ---------- */
+
+.settings-section {
+  border-top: 1px solid var(--panel-border, rgba(0, 0, 0, 0.08));
+  padding: 14px 0 10px;
+}
+
+.settings-section:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+.settings-key-status {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.settings-key-status code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.settings-toggle {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--text-sub);
+  border: 1px solid var(--panel-border, rgba(0, 0, 0, 0.12));
+}
+
+.settings-actions--footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border, rgba(0, 0, 0, 0.08));
+}

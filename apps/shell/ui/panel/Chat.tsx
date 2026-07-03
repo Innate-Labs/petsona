@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChat } from '../lib/useChat'
 import { popChatSeed } from '../lib/chatSeed'
+import { loadProfile } from '../lib/local'
 import iconSend from '../assets/figma/icon-send-hover-28.svg'
 import iconSendGray from '../assets/figma/icon-send-gray-28.svg'
 import pillCircle from '../assets/figma/pill-circle-29.svg'
@@ -12,6 +13,7 @@ import pillCircle from '../assets/figma/pill-circle-29.svg'
 export function Chat() {
   const { msgs, listRef, sendText } = useChat()
   const [input, setInput] = useState('')
+  const petName = loadProfile().name
   // React 18 严格模式下 useEffect 会挂载→卸载→再挂载；用 ref 保证 seed 只消费一次
   const seedConsumed = useRef(false)
 
@@ -31,12 +33,20 @@ export function Chat() {
       <div className="float-list chat-page-list" ref={listRef}>
         {msgs.map((m) => (
           <div key={m.key} className="msg-wrap">
-            <div
-              className={`float-msg${m.role === 'user' ? ' float-msg--user' : ''}${m.error ? ' float-msg--error' : ''}`}
-            >
-              {m.text}
-              {m.streaming && <span className="chat-cursor">▍</span>}
-            </div>
+            {/* reasoning 只做 loading 指示：思考中且正文未到 → 显示「宠物名 正在来的路上…」；
+                首个正文 chunk / done / error 一到就自动撤下（reasoning 翻回 false） */}
+            {m.reasoning && !m.text && (
+              <div className="float-reasoning">{petName} 正在来的路上…</div>
+            )}
+            {/* text 空且 loading 中不渲染空气泡（否则会出现只有闪烁光标的空 pill） */}
+            {(m.text || !m.reasoning) && (
+              <div
+                className={`float-msg${m.role === 'user' ? ' float-msg--user' : ''}${m.error ? ' float-msg--error' : ''}`}
+              >
+                {m.text}
+                {m.streaming && <span className="chat-cursor">▍</span>}
+              </div>
+            )}
             {m.tooling && <div className="float-tooling">{m.tooling}</div>}
           </div>
         ))}

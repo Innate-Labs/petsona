@@ -1,17 +1,19 @@
-// panel/Login.tsx —— 邮箱验证码登录（§4 登录行；桌面强制登录 §0）
-// 流程：邮箱 → LOGIN_REQUEST_CODE → 验证码 → LOGIN_SUBMIT → 等 AUTH_STATE_CHANGED 广播。
-// 为什么成功态不在本组件收尾：登录态门控在 Panel，广播一到自动切主界面。
+// panel/Login.tsx —— 邮箱 + 密码单步登录（桌面 M1 简化流；替换 v2.1 验证码流）
+// 流程：邮箱 + 密码 → LOGIN_SUBMIT（password 路径）→ 等 AUTH_STATE_CHANGED 广播。
+// 首次登录即注册（后端不存在 user 时自动创建 + 存密码 hash）。
+// 为什么改单步：桌面暂无邮件服务，验证码发不出去；密码流去掉发送环节，本地即可用。
 
 import { useEffect, useState } from 'react'
 import { IPC } from '@petsona/shared'
-import type { AuthStateChangedPayload, LoginRequestCodePayload, LoginSubmitPayload } from '@petsona/shared'
+import type { AuthStateChangedPayload, LoginSubmitPayload } from '@petsona/shared'
 import { IpcError, on, request } from '../lib/ipc'
 import { CHARACTER } from '../lib/character'
 
+const MIN_PASSWORD = 6   // SPEC-GAP: 规格未给密码强度，取常见最低门槛
+
 export function Login() {
-  const [step, setStep] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -24,26 +26,14 @@ export function Login() {
     [],
   )
 
-  const requestCode = () => {
-    const em = email.trim()
-    if (!em.includes('@')) {
-      setErr('邮箱格式不对')
-      return
-    }
-    setBusy(true)
-    setErr('')
-    const payload: LoginRequestCodePayload = { email: em }
-    void request(IPC.LOGIN_REQUEST_CODE, payload)
-      .then(() => setStep('code'))
-      .catch((e: unknown) => setErr(e instanceof IpcError ? `发送失败：${e.code}` : '发送失败'))
-      .finally(() => setBusy(false))
-  }
-
   const submit = () => {
-    if (!code.trim()) return
+    const em = email.trim()
+    const pw = password
+    if (!em.includes('@')) { setErr('邮箱格式不对'); return }
+    if (pw.length < MIN_PASSWORD) { setErr(`密码至少 ${MIN_PASSWORD} 位`); return }
     setBusy(true)
     setErr('')
-    const payload: LoginSubmitPayload = { email: email.trim(), code: code.trim() }
+    const payload: LoginSubmitPayload = { email: em, password: pw }
     void request(IPC.LOGIN_SUBMIT, payload).catch((e: unknown) => {
       setErr(e instanceof IpcError ? `登录失败：${e.code}` : '登录失败')
       setBusy(false)
@@ -54,44 +44,30 @@ export function Login() {
     <div className="login">
       <img className="login-face" src={CHARACTER.avatar} alt="宠物" style={{ borderRadius: 999 }} />
       <h1>宠格 Petsona</h1>
-      <p className="login-hint">先登录，宠物才能记住你哦</p>
-      {step === 'email' ? (
-        <div className="login-form">
-          <input
-            type="email"
-            value={email}
-            placeholder="邮箱"
-            disabled={busy}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') requestCode()
-            }}
-          />
-          <button disabled={busy} onClick={requestCode}>
-            {busy ? '发送中…' : '发送验证码'}
-          </button>
-        </div>
-      ) : (
-        <div className="login-form">
-          <p className="login-hint">验证码已发到 {email.trim()}</p>
-          <input
-            value={code}
-            placeholder="6 位验证码"
-            disabled={busy}
-            autoFocus
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submit()
-            }}
-          />
-          <button disabled={busy} onClick={submit}>
-            {busy ? '登录中…' : '登录'}
-          </button>
-          <button className="link" disabled={busy} onClick={() => setStep('email')}>
-            换个邮箱
-          </button>
-        </div>
-      )}
+      <p className="login-hint">用邮箱 + 密码登录，首次填即注册</p>
+      <div className="login-form">
+        <input
+          type="email"
+          value={email}
+          placeholder="邮箱"
+          disabled={busy}
+          autoComplete="email"
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+        />
+        <input
+          type="password"
+          value={password}
+          placeholder={`密码（至少 ${MIN_PASSWORD} 位）`}
+          disabled={busy}
+          autoComplete="current-password"
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+        />
+        <button disabled={busy} onClick={submit}>
+          {busy ? '登录中…' : '登录 / 注册'}
+        </button>
+      </div>
       {err && <p className="login-err">{err}</p>}
     </div>
   )

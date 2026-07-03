@@ -336,8 +336,11 @@ export function createHarness(emitLine: (line: string) => void) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p?.email ?? '')) throw new IpcError('BAD_REQUEST', '邮箱格式不对')
     return gateway.requestCode(p.email)
   })
-  router.onReq(IPC.LOGIN_SUBMIT, async (p: { email: string; code: string }) => {
-    const res = await gateway.submitCode(p?.email ?? '', p?.code ?? '')
+  router.onReq(IPC.LOGIN_SUBMIT, async (p: { email: string; code?: string; password?: string }) => {
+    // 双凭证：password 优先（桌面单步流），无则 fallback 验证码（老 UI/tests）
+    const res = p?.password
+      ? await gateway.submitPassword(p.email ?? '', p.password)
+      : await gateway.submitCode(p?.email ?? '', p?.code ?? '')
     authState = { loginState: 'logged_in', email: res.email }
     emit({ type: IPC.AUTH_STATE_CHANGED, payload: authState })
     tracker.track(TRACK.登录, {})
@@ -361,6 +364,17 @@ export function createHarness(emitLine: (line: string) => void) {
     emit({ type: IPC.AUTH_STATE_CHANGED, payload: authState })
     tracker.track(TRACK.登出, {})
     return { ok: true }
+  })
+
+  // BYOK：用户自带 LLM key（本地 Keychain 存/删，不出 harness；chat 时携 header 到网关覆盖）
+  router.onReq(IPC.LLM_KEY_GET, async () => gateway.getUserLlmApiKeyMeta())
+  router.onReq(IPC.LLM_KEY_SET, async (p: { key?: string }) => {
+    await gateway.setUserLlmApiKey(p?.key ?? '')
+    return gateway.getUserLlmApiKeyMeta()
+  })
+  router.onReq(IPC.LLM_KEY_CLEAR, async () => {
+    await gateway.clearUserLlmApiKey()
+    return { hasKey: false }
   })
 
   // 系统类（SH→H event）
@@ -387,6 +401,8 @@ export function createHarness(emitLine: (line: string) => void) {
       emit({ type: IPC.AUTH_STATE_CHANGED, payload: authState })
     }
   })
+  // BYOK：启动即从 Keychain 恢复用户 LLM key（有则 chat 请求自动带 header 覆盖）
+  void gateway.loadUserLlmApiKey()
   tracker.track(TRACK.桌宠_启动, { version: '3.0.0', startMs: Date.now() - startedAt })
 
   return {

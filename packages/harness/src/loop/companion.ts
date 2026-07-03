@@ -166,6 +166,10 @@ export class CompanionLoop {
             roundText += t
             emit({ type: IPC.CHAT_CHUNK, payload: { turnId, delta: t } })
           },
+          // reasoning 流不进 roundText 也不喂回模型（reasoning 块只用于展示，纯 UI 事件）
+          onReasoning: (t) => {
+            emit({ type: IPC.CHAT_REASONING, payload: { turnId, delta: t } })
+          },
           onToolUse: (tu) => toolUses.push(tu),
           onDone: (d) => { state.stopReason = d.stopReason },
           onError: (e) => {

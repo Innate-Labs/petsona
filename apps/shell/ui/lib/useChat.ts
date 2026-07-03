@@ -9,6 +9,7 @@ import type {
   ChatErrorPayload,
   ChatHistoryGetPayload,
   ChatHistoryGetRes,
+  ChatReasoningPayload,
   ChatSendPayload,
   ChatToolingPayload,
 } from '@petsona/shared'
@@ -22,6 +23,9 @@ export type ChatMsg = {
   streaming?: boolean
   error?: boolean
   tooling?: string
+  // reasoning 类模型（DeepSeek R1/v4-flash）思考流指示：仅作 loading 布尔位，
+  // 内容不外露（避免暴露内部推理链），有正文/done/error 到达即翻回 false
+  reasoning?: boolean
 }
 
 const turnKey = (turnId: string) => `turn:${turnId}`
@@ -53,13 +57,18 @@ export function useChat() {
       on<ChatChunkPayload>(IPC.CHAT_CHUNK, (p) =>
         upsertTurn(p.turnId, (m) => ({ ...m, text: m.text + p.delta, streaming: true })),
       ),
+      // reasoning 只翻布尔位——不落 delta 文本，避免长思考链在气泡里暴露
+      on<ChatReasoningPayload>(IPC.CHAT_REASONING, (p) =>
+        upsertTurn(p.turnId, (m) => ({ ...m, reasoning: true, streaming: true })),
+      ),
       on<ChatToolingPayload>(IPC.CHAT_TOOLING, (p) => upsertTurn(p.turnId, (m) => ({ ...m, tooling: p.note }))),
-      // CHAT_DONE 用 reply 整体覆盖：persona enforce 可能改写流式中间产物
+      // CHAT_DONE 用 reply 整体覆盖：persona enforce 可能改写流式中间产物；
+      // reasoning 一并翻回 false，让「正在来的路上」loading 撤下
       on<ChatDonePayload>(IPC.CHAT_DONE, (p) =>
-        upsertTurn(p.turnId, (m) => ({ ...m, text: p.reply, streaming: false, tooling: undefined })),
+        upsertTurn(p.turnId, (m) => ({ ...m, text: p.reply, streaming: false, tooling: undefined, reasoning: false })),
       ),
       on<ChatErrorPayload>(IPC.CHAT_ERROR, (p) =>
-        upsertTurn(p.turnId, (m) => ({ ...m, text: p.petLine, streaming: false, error: true, tooling: undefined })),
+        upsertTurn(p.turnId, (m) => ({ ...m, text: p.petLine, streaming: false, error: true, tooling: undefined, reasoning: false })),
       ),
     ]
     return () => unsubs.forEach((u) => u())
@@ -73,14 +82,36 @@ export function useChat() {
   const sendText = (raw: string): boolean => {
     const text = raw.trim()
     if (!text) return false
-    setMsgs((prev) => [...prev, { key: `user:${Date.now()}:${prev.length}`, role: 'user', text }])
+    // 用户消息 + 立即挂宠物占位（reasoning=true → 触发「宠物名 正在来的路上…」loading）
+    // 为什么不等 CHAT_SEND res：res 至少要 IPC 往返（10-100ms），而首帧上游返回要 500ms+，
+    // 用户敲完回车立刻要有回应；等 res 回来只是拿真 turnId 再 rekey 占位。
+    const tempPetKey = `pet-pending:${Date.now()}`
+    setMsgs((prev) => [
+      ...prev,
+      { key: `user:${Date.now()}:${prev.length}`, role: 'user', text },
+      { key: tempPetKey, role: 'pet', text: '', reasoning: true, streaming: true },
+    ])
     track(TRACK.对话_发起, {})
     const payload: ChatSendPayload = { text }
-    void request(IPC.CHAT_SEND, payload).catch((e: unknown) => {
-      // req 失败（超时/sidecar 掉线）走不到 CHAT_ERROR；人格化兜底是 harness 职责
-      const code = e instanceof IpcError ? e.code : 'UPSTREAM'
-      setMsgs((prev) => [...prev, { key: `err:${Date.now()}`, role: 'pet', text: `[${code}] 发送失败`, error: true }])
-    })
+    void request<{ turnId: string }>(IPC.CHAT_SEND, payload)
+      .then((res) => {
+        // 用真实 turnId 键替换 pending 占位；若极端竞态里真 msg 已由 CHUNK/REASONING 事件建过，
+        // 只需删掉 pending，避免两个宠物气泡并列
+        setMsgs((prev) => {
+          const petKey = turnKey(res.turnId)
+          const hasReal = prev.some((m) => m.key === petKey)
+          if (hasReal) return prev.filter((m) => m.key !== tempPetKey)
+          return prev.map((m) => m.key === tempPetKey ? { ...m, key: petKey } : m)
+        })
+      })
+      .catch((e: unknown) => {
+        // req 失败（超时/sidecar 掉线）走不到 CHAT_ERROR；把占位就地转成错误气泡
+        const code = e instanceof IpcError ? e.code : 'UPSTREAM'
+        setMsgs((prev) => prev.map((m) => m.key === tempPetKey
+          ? { ...m, text: `[${code}] 发送失败`, error: true, reasoning: false, streaming: false }
+          : m,
+        ))
+      })
     return true
   }
 

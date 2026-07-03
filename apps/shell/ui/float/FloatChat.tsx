@@ -57,12 +57,17 @@ export function FloatChat() {
         {msgs.length === 0 && <div className="float-msg">人，咪想你…</div>}
         {msgs.map((m) => (
           <div key={m.key} className="msg-wrap">
-            <div
-              className={`float-msg${m.role === 'user' ? ' float-msg--user' : ''}${m.error ? ' float-msg--error' : ''}`}
-            >
-              {m.text}
-              {m.streaming && <span className="chat-cursor">▍</span>}
-            </div>
+            {m.reasoning && !m.text && (
+              <div className="float-reasoning">{name} 正在来的路上…</div>
+            )}
+            {(m.text || !m.reasoning) && (
+              <div
+                className={`float-msg${m.role === 'user' ? ' float-msg--user' : ''}${m.error ? ' float-msg--error' : ''}`}
+              >
+                {m.text}
+                {m.streaming && <span className="chat-cursor">▍</span>}
+              </div>
+            )}
             {m.tooling && <div className="float-tooling">{m.tooling}</div>}
           </div>
         ))}

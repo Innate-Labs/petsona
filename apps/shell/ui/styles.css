@@ -430,6 +430,16 @@ body[data-route='float'] {
   color: var(--text-sub);
 }
 
+/* reasoning loading 指示：思考中的占位提示（「宠物名 正在来的路上…」），
+   正文一到自动撤下——设计为轻量斜体灰字，不加背景块避免抢戏 */
+.float-reasoning {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-style: italic;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+
 /* 超级输入框（32:3857：284×80 白卡圆角27 + #decdb4 投影） */
 .super-input {
   flex-shrink: 0;

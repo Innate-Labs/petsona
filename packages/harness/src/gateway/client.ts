@@ -5,10 +5,14 @@ import type {
   ErrCode, LlmChatRequest, LlmChatResponse, LlmSseDone, LlmSseError, LlmSseToolUse,
   MemorySyncPush, MemorySyncPushRes, MemorySyncPull, MemorySyncPullRes, TrackEvent,
 } from '@petsona/shared'
+// LlmSseReasoning 只用作 onReasoning 契约文档；实际 dispatch 用运行时字符串判断，
+// 未定义 payload 类型时消费端安全丢弃
 import { keychainDelete, keychainGet, keychainSet } from './keychain.js'
 
 const ACCESS_ACCOUNT = 'accessToken'
 const REFRESH_ACCOUNT = 'refreshToken'
+// BYOK：用户自带 LLM key 也进 Keychain，与 auth token 同 service（dev.petsona.app）不同 account
+const USER_LLM_KEY_ACCOUNT = 'userLlmApiKey'
 
 export class GatewayError extends Error {
   constructor(public code: ErrCode, message: string) {
@@ -18,6 +22,8 @@ export class GatewayError extends Error {
 
 export type ChatStreamCallbacks = {
   onDelta: (text: string) => void
+  // SPEC-GAP: reasoning 类模型（DeepSeek R1/v4-flash）的思考流；非 reasoning 模型永远不回调
+  onReasoning?: (text: string) => void
   onToolUse?: (tu: LlmSseToolUse) => void
   onDone: (done: LlmSseDone) => void
   onError: (err: LlmSseError) => void
@@ -28,6 +34,8 @@ export type AuthTokens = { accessToken: string; refreshToken?: string }
 export class GatewayClient {
   private accessToken: string | null = null
   private refreshToken: string | null = null
+  // 用户自带 LLM key 内存缓存，避免每次请求都 spawn security CLI；startup 从 Keychain 载入
+  private userLlmApiKey: string | null = null
 
   constructor(private baseUrl: string) {}
 
@@ -59,10 +67,37 @@ export class GatewayClient {
 
   get isAuthenticated(): boolean { return this.accessToken !== null }
 
+  // ---------- BYOK：用户自带 LLM key（Keychain 存/内存缓存，chat 请求带 header）----------
+
+  async loadUserLlmApiKey(): Promise<void> {
+    this.userLlmApiKey = await keychainGet(USER_LLM_KEY_ACCOUNT)
+  }
+
+  async setUserLlmApiKey(key: string): Promise<void> {
+    // 空串等价于清除；否则落盘 Keychain + 更新内存缓存
+    const trimmed = key.trim()
+    if (!trimmed) { await this.clearUserLlmApiKey(); return }
+    this.userLlmApiKey = trimmed
+    await keychainSet(USER_LLM_KEY_ACCOUNT, trimmed)
+  }
+
+  async clearUserLlmApiKey(): Promise<void> {
+    this.userLlmApiKey = null
+    await keychainDelete(USER_LLM_KEY_ACCOUNT)
+  }
+
+  /** 只回是否已设置 + 末四位掩码，永不回明文（防日志/截屏泄露） */
+  getUserLlmApiKeyMeta(): { hasKey: boolean; maskedTail?: string } {
+    if (!this.userLlmApiKey) return { hasKey: false }
+    return { hasKey: true, maskedTail: this.userLlmApiKey.slice(-4) }
+  }
+
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {}
     if (json) h['content-type'] = 'application/json'
     if (this.accessToken) h['authorization'] = `Bearer ${this.accessToken}`
+    // BYOK header：只在 chat 请求带（headers() 通用；其它端点带上 gateway 也会忽略，无副作用）
+    if (this.userLlmApiKey) h['x-petsona-user-llm-key'] = this.userLlmApiKey
     return h
   }
 
@@ -76,6 +111,15 @@ export class GatewayClient {
     // 网关路由是 /v1/auth/login（继承 v2.1 §3.3.4），email 在 user 里而非顶层
     const res = await this.postJson<AuthTokens & { user: { id: string; email: string } }>(
       '/v1/auth/login', { email, code },
+    )
+    await this.saveTokens(res)
+    return { ...res, email: res.user?.email ?? email }
+  }
+
+  /** 密码路径：首次登录即注册（网关侧不存在 user 时创建 + 写 hash） */
+  async submitPassword(email: string, password: string): Promise<AuthTokens & { email: string }> {
+    const res = await this.postJson<AuthTokens & { user: { id: string; email: string } }>(
+      '/v1/auth/login', { email, password },
     )
     await this.saveTokens(res)
     return { ...res, email: res.user?.email ?? email }
@@ -157,6 +201,7 @@ export class GatewayClient {
             const data = JSON.parse(line.slice(5).trim())
             switch (currentEvent) {
               case 'delta': cb.onDelta(data.text); break
+              case 'reasoning': cb.onReasoning?.(data.text); break
               case 'tool_use': cb.onToolUse?.(data); break
               case 'done': cb.onDone(data); return
               case 'error': cb.onError(data); return
