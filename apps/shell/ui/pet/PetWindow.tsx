@@ -106,6 +106,14 @@ export function PetWindow() {
     openMainPanel(e)
   }
 
+  // 缩放手柄：窗口边缘全透明看不见摸不准，宠物身上一拖又是移动窗口——给一个悬停可见的
+  // 右下角手柄，按住即进入系统级窗口角拖拽缩放（等价拖普通窗口右下角）
+  const onResizeGrip = (e: MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (isTauri()) void getCurrentWindow().startResizeDragging('SouthEast')
+  }
+
   return (
     <div className="pet-window" onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       {bubble && <Bubble bubble={bubble} onDismiss={() => setBubble(null)} />}
@@ -113,6 +121,7 @@ export function PetWindow() {
         {/* wave 期间切「举手打招呼」动作视频；WAVE_MS 后回落 sit（EMOTION_META.pose） */}
         <Sprite emotion={emotion} wave={waving} />
       </div>
+      <div className="pet-resize" title="拖拽调整大小" onMouseDown={onResizeGrip} />
     </div>
   )
 }

@@ -1,19 +1,18 @@
 // pet/Sprite.tsx —— 宠物形象渲染：情绪→语义姿势→当前角色资产（视频优先，图集兜底）
 // 角色可插拔：本组件不 import 任何具体美术资产（lib/character.ts 是唯一出口）。
 //
-// 防空窗双保险（第四轮真机验收修复「单击后宠物空白」）：
-//   ① 双缓冲换源：新姿势视频没 fire onPlaying 之前，旧视频保持可见——WKWebView 对 <video>
-//      key 重挂载后要重新走 加载→解码→起播，中间有几百毫秒透明空窗，快速切换时肉眼即「宠物消失」。
-//   ② 起播看门狗：换源 1.5s 还没 playing 视为坏源（WKWebView 解码卡死常不 fire error），
-//      按 pose→sit→图集 逐级回退，任何情况都有画面。
+// 防空窗：双缓冲换源——新姿势视频没 fire onPlaying 之前，旧视频保持可见。WKWebView 对
+// <video> key 重挂载后要重新走 加载→解码→起播，中间有几百毫秒透明空窗，快速切换肉眼即
+// 「宠物消失」。新源若一直不起播，旧源就一直播着（画面永不空）；只有真正 fire error 的源
+// 才按 pose→sit→图集 逐级回退。
+// ⚠️ 不要加「起播超时判坏源」的看门狗：冷启动首个视频经 tauri 协议加载常超 1.5s，
+//    第四轮实测会被误判永久回退到旧图集（用户报「宠物变回以前的形象」）。
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Emotion } from '@petsona/shared'
 import { EMOTION_META } from '../lib/emotion'
 import { poseStyle, poseVideo } from '../lib/character'
 import type { PoseName } from '../lib/character'
-
-const PLAY_WATCHDOG_MS = 1500
 
 function PoseMedia({ pose }: { pose: PoseName }) {
   const [brokenSrcs, setBrokenSrcs] = useState<string[]>([])
@@ -27,12 +26,6 @@ function PoseMedia({ pose }: { pose: PoseName }) {
   const sitSrc = poseVideo('sit')
   const src =
     want && !brokenSrcs.includes(want) ? want : sitSrc && !brokenSrcs.includes(sitSrc) ? sitSrc : null
-
-  useEffect(() => {
-    if (!src || src === playingSrc) return
-    const t = setTimeout(() => markBroken(src), PLAY_WATCHDOG_MS)
-    return () => clearTimeout(t)
-  }, [src, playingSrc])
 
   if (!src) return <div className="sprite-img" style={poseStyle(pose)} />
 
