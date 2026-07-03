@@ -5,10 +5,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import iconBack from '../assets/figma/icon-back-18.svg'
-import iconClose from '../assets/figma/icon-close-18.svg'
 import { CHARACTER } from '../lib/character'
-import { isTauri } from '../lib/ipc'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 
 export function PetAvatar({ size = 32 }: { size?: number }) {
   return (
@@ -18,13 +15,8 @@ export function PetAvatar({ size = 32 }: { size?: number }) {
   )
 }
 
-function closeWindow() {
-  // 浏览器原型没有窗口可关，退回首页方便演示循环
-  if (isTauri()) void getCurrentWindow().hide()
-  else window.location.hash = '#/panel'
-}
-
-/** 页头：home 变体（头像+名）与子页变体（返回+居中标题）；关闭按钮两者共有 */
+/** 页头：home 变体（头像+名）与子页变体（返回+居中标题）。
+    不设关闭按钮：面板是带标题栏的普通窗口，macOS 红绿灯已有关闭（第四轮验收去掉页内冗余 X）。 */
 export function PageHead(props: { title?: string; petName?: string; onBack?: () => void }) {
   const { title, petName, onBack } = props
   return (
@@ -37,9 +29,8 @@ export function PageHead(props: { title?: string; petName?: string; onBack?: () 
         <PetAvatar />
       )}
       {onBack ? <span className="page-head-title">{title}</span> : <span className="page-head-name">{petName}</span>}
-      <button className="icon-btn" onClick={closeWindow} aria-label="关闭">
-        <img src={iconClose} alt="" />
-      </button>
+      {/* 子页标题居中依赖左右等宽：右侧补一个返回按钮同宽的占位 */}
+      {onBack && <span style={{ width: 22 }} />}
     </header>
   )
 }
@@ -74,7 +65,19 @@ export function PageShell(props: {
 //   Tauri（macOS WKWebView）默认不实现这三个方法，调用会静默返回而不弹层——
 //   面板窗任何依赖它们的按钮都会「点了没反应」。挂载 <ModalHost> 后通过 useDialog() 走自绘弹层。
 
-type PromptOpts = { title: string; defaultValue?: string; placeholder?: string; okText?: string; cancelText?: string }
+type PromptOpts = {
+  title: string
+  defaultValue?: string
+  placeholder?: string
+  okText?: string
+  cancelText?: string
+  /** 传 options 渲染下拉单选（用户只挑不填），与 inputType/suggestions 互斥 */
+  options?: string[]
+  /** 原生输入控件类型：date/number 等（WKWebView 有原生日期/数字控件） */
+  inputType?: 'text' | 'number' | 'date' | 'time'
+  /** datalist 建议列表：可挑常见项也可自填 */
+  suggestions?: string[]
+}
 type ConfirmOpts = { title: string; okText?: string; cancelText?: string; danger?: boolean }
 type AlertOpts = { title: string; okText?: string }
 type DialogApi = {
@@ -166,25 +169,53 @@ function ModalScrim({ onCancel, children }: { onCancel: () => void; children: Re
 }
 
 function PromptDialog({ opts, onSubmit }: { opts: PromptOpts; onSubmit: (v: string | null) => void }) {
-  const [value, setValue] = useState(opts.defaultValue ?? '')
+  const [value, setValue] = useState(() => {
+    // 下拉模式的初值必须落在选项内，否则 select 显示与提交值不一致
+    if (opts.options?.length)
+      return opts.defaultValue && opts.options.includes(opts.defaultValue) ? opts.defaultValue : opts.options[0]!
+    return opts.defaultValue ?? ''
+  })
   const inputRef = useRef<HTMLInputElement | null>(null)
   useEffect(() => {
     // 弹出立刻聚焦 + 选中默认值，方便直接改写
     inputRef.current?.focus()
     inputRef.current?.select()
   }, [])
+  const listId = opts.suggestions?.length ? 'prompt-suggestions' : undefined
   return (
     <ModalScrim onCancel={() => onSubmit(null)}>
       <p className="modal-title">{opts.title}</p>
-      <input
-        ref={inputRef}
-        value={value}
-        placeholder={opts.placeholder}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.nativeEvent.isComposing) onSubmit(value)
-        }}
-      />
+      {opts.options?.length ? (
+        <select value={value} autoFocus onChange={(e) => setValue(e.target.value)}>
+          {opts.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <>
+          <input
+            ref={inputRef}
+            type={opts.inputType ?? 'text'}
+            step={opts.inputType === 'number' ? '0.1' : undefined}
+            list={listId}
+            value={value}
+            placeholder={opts.placeholder}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) onSubmit(value)
+            }}
+          />
+          {listId && (
+            <datalist id={listId}>
+              {opts.suggestions!.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          )}
+        </>
+      )}
       <div className="modal-actions">
         <button className="chip" onClick={() => onSubmit(null)}>
           {opts.cancelText ?? '取消'}

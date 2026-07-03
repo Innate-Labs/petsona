@@ -18,8 +18,8 @@ import { EmotionMachine } from './EmotionMachine'
 import { Sprite } from './Sprite'
 import { Bubble } from './Bubble'
 
-// wave 动作视频约 3~4s，取 3500ms 让循环播 1~2 次自然收尾
-const WAVE_MS = 3500
+// wave.mov 实测 4.017s（AVFoundation），取 4000ms 播完整一遍再回落
+const WAVE_MS = 4000
 // 双击窗口：>1x 的单击间隔就归为「继续挑逗」，触发多次 wave；<= 视为双击开面板
 const DOUBLE_CLICK_MS = 260
 

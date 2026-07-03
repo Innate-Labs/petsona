@@ -52,7 +52,8 @@ describe('CronScheduler', () => {
     const s = makeScheduler()
     s.start(); s.stop()   // start 载盘并立即 tick 一次（12:00 命中）
     s.tick()              // 同一分钟第二次 tick（模拟 30s 间隔）不重复
-    const items = queue.drainWhere(() => true)
+    // drainWhere 必须传假时钟：默认 Date.now() 会把假时钟打的 expiresAt 判成已过期（时段性 flake）
+    const items = queue.drainWhere(() => true, clock)
     expect(items).toHaveLength(1)
     expect(items[0]!.content).toContain('陪伴 100 天')
     expect(items[0]!.content).toMatch(/^<cron-reminder /)
@@ -63,20 +64,20 @@ describe('CronScheduler', () => {
     clock += 59 * MIN; s.tick()
     expect(queue.size).toBe(0)
     clock += 1 * MIN; s.tick()
-    const items = queue.drainWhere(() => true)
+    const items = queue.drainWhere(() => true, clock)
     expect(items[0]!.content).toBe('<reminder kind="water"/>')
     expect(items[0]!.priority).toBe(2)
   })
   it('pomodoro：SET 立即 focus_start，焦点段结束 focus_end，休息段结束 rest_end，STOP 发 abort', () => {
     const s = makeScheduler()
     s.setReminder('pomodoro', { focusMin: 25, restMin: 5 })
-    expect(queue.drainWhere(() => true)[0]!.content).toBe('<reminder kind="pomodoro" phase="focus_start"/>')
+    expect(queue.drainWhere(() => true, clock)[0]!.content).toBe('<reminder kind="pomodoro" phase="focus_start"/>')
     clock += 25 * MIN; s.tick()
-    expect(queue.drainWhere(() => true)[0]!.content).toBe('<reminder kind="pomodoro" phase="focus_end"/>')
+    expect(queue.drainWhere(() => true, clock)[0]!.content).toBe('<reminder kind="pomodoro" phase="focus_end"/>')
     clock += 5 * MIN; s.tick()
-    expect(queue.drainWhere(() => true)[0]!.content).toBe('<reminder kind="pomodoro" phase="rest_end"/>')
+    expect(queue.drainWhere(() => true, clock)[0]!.content).toBe('<reminder kind="pomodoro" phase="rest_end"/>')
     s.stopReminder('pomodoro')
-    expect(queue.drainWhere(() => true)[0]!.content).toBe('<reminder kind="pomodoro" phase="abort"/>')
+    expect(queue.drainWhere(() => true, clock)[0]!.content).toBe('<reminder kind="pomodoro" phase="abort"/>')
     expect(s.jobs().find((j) => j.kind === 'pomodoro')).toBeUndefined()
   })
   it('water/stand durable 落盘、pomodoro 不落盘；stopReminder 从盘上移除', () => {

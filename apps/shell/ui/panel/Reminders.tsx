@@ -22,10 +22,58 @@ const CARDS: CardDef[] = [
   { kind: 'stand', title: '站立提醒', value: '60:00' },
 ]
 
+// 半小时粒度 48 个时间点：用户只挑不填（第四轮验收：免打扰不要手写时间）
+const TIME_OPTS = Array.from({ length: 48 }, (_, i) => {
+  const h = String(Math.floor(i / 2)).padStart(2, '0')
+  return `${h}:${i % 2 ? '30' : '00'}`
+})
+
+/** 免打扰时段选择：开始/结束两个下拉；跨零点合法（如 22:00–09:00） */
+function QuietDialog({ initial, onDone }: { initial: [string, string]; onDone: (v: [string, string] | null) => void }) {
+  const [start, setStart] = useState(initial[0])
+  const [end, setEnd] = useState(initial[1])
+  // config 里的既有值可能不在半小时刻度上（手改过 config.json），并进选项防止 select 显示错位
+  const opts = (cur: string) => (TIME_OPTS.includes(cur) ? TIME_OPTS : [cur, ...TIME_OPTS])
+  return (
+    <div className="modal-scrim" onMouseDown={(e) => e.target === e.currentTarget && onDone(null)}>
+      <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+        <p className="modal-title">免打扰时段</p>
+        <div className="modal-row">
+          <select value={start} onChange={(e) => setStart(e.target.value)}>
+            {opts(start).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <span>至</span>
+          <select value={end} onChange={(e) => setEnd(e.target.value)}>
+            {opts(end).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="modal-hint">这段时间内不主动打扰你（提醒会押后到时段结束）</p>
+        <div className="modal-actions">
+          <button className="chip" onClick={() => onDone(null)}>
+            取消
+          </button>
+          <button className="chip chip--doing" onClick={() => onDone([start, end])}>
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Reminders() {
   const [prefs, setPrefs] = useState(loadPrefs)
   const [todos, setTodos] = useState<TodoItem[]>(loadTodos)
   const [quiet, setQuiet] = useState<[string, string] | null>(null)
+  const [quietEditing, setQuietEditing] = useState(false)
   const [todoOpen, setTodoOpen] = useState(true)
   const [note, setNote] = useState('')
   const dialog = useDialog()
@@ -51,20 +99,15 @@ export function Reminders() {
     }
   }
 
-  const setQuietHours = () => {
-    if (!quiet) return
-    void dialog
-      .prompt({ title: '免打扰时段（如 22:00-09:00）', defaultValue: quiet.join('-'), placeholder: '22:00-09:00' })
-      .then((v) => {
-        const m = v?.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/)
-        if (!m) return
-        const next: [string, string] = [m[1]!, m[2]!]
-        setQuiet(next)
-        // 整段覆盖 proactive 会丢其它字段，先取回再并（CONFIG_SET 浅合并语义）
-        return request<ConfigGetRes>(IPC.CONFIG_GET, {}).then(({ config }) => {
-          const patch: Partial<Config> = { proactive: { ...config.proactive, quietHours: next } }
-          return request(IPC.CONFIG_SET, { patch })
-        })
+  const applyQuietHours = (next: [string, string] | null) => {
+    setQuietEditing(false)
+    if (!next) return
+    setQuiet(next)
+    // 整段覆盖 proactive 会丢其它字段，先取回再并（CONFIG_SET 浅合并语义）
+    void request<ConfigGetRes>(IPC.CONFIG_GET, {})
+      .then(({ config }) => {
+        const patch: Partial<Config> = { proactive: { ...config.proactive, quietHours: next } }
+        return request(IPC.CONFIG_SET, { patch })
       })
       .catch(() => {})
   }
@@ -105,7 +148,7 @@ export function Reminders() {
           <div className="remind-card-value remind-card-value--long">{quiet ? quiet.join('–') : '—'}</div>
           <div className="remind-card-chips">
             <span className="chip chip--on">已开启</span>
-            <button className="chip" onClick={setQuietHours}>
+            <button className="chip" onClick={() => quiet && setQuietEditing(true)}>
               设置
             </button>
           </div>
@@ -142,6 +185,7 @@ export function Reminders() {
       <button className="fab" onClick={addTodo} aria-label="新增待办">
         +
       </button>
+      {quietEditing && quiet && <QuietDialog initial={quiet} onDone={applyQuietHours} />}
     </>
   )
 }

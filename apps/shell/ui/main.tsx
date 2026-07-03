@@ -6,7 +6,11 @@ import { createRoot } from 'react-dom/client'
 import { PetWindow } from './pet/PetWindow'
 import { FloatChat } from './float/FloatChat'
 import { Panel } from './panel/Panel'
+import { isTauri } from './lib/ipc'
 import './styles.css'
+
+// 面板限宽只给浏览器原型用（手机比例预览）；Tauri 窗口里面板必须撑满，CSS 按 data-host 分流
+document.body.dataset.host = isTauri() ? 'tauri' : 'web'
 
 type Route = 'pet' | 'float' | 'panel'
 

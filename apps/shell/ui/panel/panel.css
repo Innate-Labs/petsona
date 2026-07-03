@@ -1,8 +1,8 @@
 /* panel/panel.css —— 面板五页（首页/宠物数据/对话记录/提醒事项/设置中心）样式，规格见 ../DESIGN.md */
 
-/* 面板壳：Figma 帧 337×551 是手机原型比例；Tauri 桌面窗改为撑满窗口（宽度由 lib.rs 的 inner_size 定），
-   浏览器原型里 max-width 限宽居中以保留手机预览。为什么用 media-min 而不是永久 max-width：
-   桌面窗口就是外壳，两侧不该有奶油底外的留白；预览器 iframe 里才需要边距，用宽度断点区分。 */
+/* 面板壳：Figma 帧 337×551 是手机原型比例；Tauri 桌面窗永远撑满窗口（宽度由 lib.rs 的 inner_size 定），
+   限宽居中只留给浏览器原型（body[data-host=web]，main.tsx 打标）。
+   为什么不用宽度断点：Tauri 窗口可被用户拉宽/最大化，断点会误伤——第四轮验收实测最大化后两侧大留白。 */
 .panel-shell {
   width: 100%;
   height: 100vh;
@@ -14,11 +14,8 @@
   overflow: hidden;
 }
 
-@media (min-width: 600px) {
-  /* 浏览器原型：宽窗口下限 420 手机比例居中，Tauri 窗口 <600px 走上面的撑满分支 */
-  .panel-shell {
-    max-width: 420px;
-  }
+body[data-host='web'] .panel-shell {
+  max-width: 420px;
 }
 
 /* ---------- 页头/页脚（组件库 页头 32:4143 / 页脚 32:4008） ---------- */
@@ -605,6 +602,57 @@
   height: 12px;
 }
 
+/* 行内原生下拉套 chip 皮（宠物种类/性格）：select 隐掉原生外观，chevron 用图标补 */
+.drop-chip--select {
+  position: relative;
+  padding: 0;
+}
+
+.drop-chip--select select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  height: 28px;
+  padding: 0 24px 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.drop-chip--select > img {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* 可点编辑的值（品种/年龄/体重/日期）：hover 出编辑铅笔 */
+.data-row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 16px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.data-row-btn img {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+}
+
+.data-row:hover .data-row-btn img {
+  opacity: 0.7;
+}
+
 /* 长按钮（33:238：305×52 渐变圆角999） */
 .long-btn {
   display: block;
@@ -801,6 +849,23 @@ button.link {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* 横排控件行（如免打扰的 开始至结束 两个下拉） */
+.modal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-row select {
+  flex: 1;
+}
+
+.modal-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-sub);
 }
 
 @keyframes modal-fade-in {

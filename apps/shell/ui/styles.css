@@ -149,6 +149,13 @@ select:focus {
   animation: breathe 3.2s ease-in-out infinite;
 }
 
+/* 宠物窗内随窗口缩放（窗口可边缘拖拽变大小）：留出气泡与内边距空间；面板内仍用固定尺寸 */
+.pet-window .sprite {
+  --pet-size: min(calc(100vw - 24px), calc(100vh - 56px));
+  width: var(--pet-size);
+  height: var(--pet-size);
+}
+
 .sprite-img {
   width: 100%;
   height: 100%;
@@ -164,14 +171,14 @@ select:focus {
   pointer-events: none; /* 点击穿透给 .sprite-hit，拖动/菜单手势不被 video 吃掉 */
 }
 
-/* 地面椭圆影（Figma Ellipse 3） */
+/* 地面椭圆影（Figma Ellipse 3）：按 sprite 比例走，窗口缩放时影子跟着变 */
 .sprite-shadow {
   position: absolute;
   left: 50%;
   bottom: 2px;
   transform: translateX(-50%);
-  width: 84px;
-  height: 16px;
+  width: 70%;
+  height: 13%;
   border-radius: 50%;
   background: radial-gradient(ellipse, rgba(89, 50, 0, 0.22) 0%, transparent 70%);
 }
