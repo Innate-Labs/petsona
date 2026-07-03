@@ -33,6 +33,11 @@
 | H15 | routes/proxy.ts | 单测需在环回地址自起 http 服务验证真实抓取，与 SSRF 拦截冲突 | 环境变量 `PETSONA_PROXY_ALLOW_LOOPBACK=1` 测试专用逃生口 | 规格 §8 测试口径收录或改用可配置 allowlist |
 | H16 | skills/screen_qa | 本地 OCR 命令行封装未定义（macOS Vision 无官方 CLI） | SKILL.md 允许退化：截图落任务目录+findings 说明无法 OCR | M3 前交付 OCR 封装（Vision framework 或 shortcuts） |
 | H17 | lib.rs open_panel | 面板深链 hash 规则规格未写 | 统一 `#/panel[/<page>]`，open_panel 负责补前缀；首建窗口 URL 也带子页 | 规格 §4 面板路由表收录 |
+| H18 | scheduler/cron.ts | 5 段 cron 表达不了任意分钟间隔（喝水 60/站立 45） | water/stand/pomodoro 走 lastFiredAt+间隔判定；water/stand 间隔实时读 config，pomodoro 会话内取 payload | 规格 §3.8 补 CronJob 间隔类任务口径 |
+| H19 | scheduler/cron.ts | 番茄钟重启恢复未定义 | durable=false：重启丢会话（中断的专注段无意义），water/stand/dream durable | 规格 §3.8 收录 |
+| H20 | shared/schedule.ts REMINDER_EXPIRES_MS | 提醒被勿扰/全屏压住后的滞留上限未定义 | 10 分钟过期丢弃（常量 dedupeKey 保证压住期间不堆积） | 规格 §3.8 补消费口径 |
+| H21 | scheduler/heartbeat.ts | p01 空闲阈值与模型 skip 后的再询问间隔未定义 | 阈值=频次档最小间隔（PROACTIVE_MIN_GAP）；skip 后 5min 内不再询问 | 规格 §3.8 补 p01 参数表 |
+| H22 | main.ts emitProactive | 主动气泡是否落对话历史未定义 | 落 hot 轮次（pet role）：下一轮模型知道自己说过什么，语义去重也有据可查 | 规格 §3.8 收录 |
 
 ## apps/gateway
 
