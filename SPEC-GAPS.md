@@ -40,6 +40,7 @@
 | H22 | main.ts emitProactive | 主动气泡是否落对话历史未定义 | 落 hot 轮次（pet role）：下一轮模型知道自己说过什么，语义去重也有据可查 | 规格 §3.8 收录 |
 | H23 | memory/dream.ts mergeDupes | Dream「合并重复」的相似口径未定义 | 精确判重（type+topic+body 全等，留 lastT 最新）；语义级逐对调 cheap 档夜跑 200 条代价过高，extract 入库时已有语义去重挡第一道 | 规格 §3.8 定判重口径 |
 | H24 | memory/dream.ts evictOverflow | 「lastT 老且低频」的“低频”无访问计数字段 | 按 lastT 单维从老到新淘汰，source=settings 永不淘汰 | 规格 §2.3 补访问频次字段或改口径 |
+| H25 | shared/ipc.ts MEMORY_GET | §3.1 消息表无单条记忆拉取；LIST 只回 40 字 gist，管理页编辑需要完整 body | 新增 `MEMORY_GET {name}` req 返回完整 ColdItem（同 H14 增补先例） | 规格 §3.1 消息表收录 |
 
 ## apps/gateway
 

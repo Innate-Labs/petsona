@@ -120,6 +120,16 @@ export function on<T = unknown>(type: IpcType, handler: (payload: T) => void): (
 
 const mockStartAt = Date.now()
 
+// 记忆管理页联调用的假数据：覆盖各分类 + settings 可编辑项（内存态，删改在会话内生效）
+const mockMemories = [
+  { name: 'preference-手冲咖啡', type: 'preference', topic: 'pref.coffee', source: 'chat', lastT: '2026-06-28T10:00:00Z', body: '只喝手冲，讨厌速溶咖啡' },
+  { name: 'fact-养了布偶猫', type: 'fact', topic: 'life.pet', source: 'system', lastT: '2026-06-30T08:00:00Z', body: '家里养了一只布偶猫叫糯米' },
+  { name: 'profile-前端工程师', type: 'profile', topic: 'work', source: 'settings', lastT: '2026-07-01T09:00:00Z', body: '职业是前端工程师，主用 React' },
+  { name: 'emotion-上线焦虑', type: 'emotion', topic: 'work.release', source: 'chat', lastT: '2026-07-02T22:00:00Z', body: '每次上线前会焦虑，需要多鼓励' },
+  { name: 'meme-鱼干梗', type: 'meme', topic: 'fun', source: 'chat', lastT: '2026-06-25T12:00:00Z', body: '「像鱼干一样优秀」是我们的夸人梗' },
+]
+const mockGist = (body: string) => (body.length > 40 ? body.slice(0, 40) + '…' : body)
+
 function mockEmit(type: string, payload: unknown, delayMs: number): void {
   setTimeout(() => dispatch(makeEnvelope('event', type, payload)), delayMs)
 }
@@ -171,6 +181,41 @@ function mockRespond(env: Envelope): void {
       mockRes(env, {})
       mockEmit(IPC.AUTH_STATE_CHANGED, { loginState: 'anon' }, 80)
       return
+    case IPC.MEMORY_LIST_GET: {
+      const { type } = env.payload as { type?: string }
+      const items = mockMemories
+        .filter((m) => !type || m.type === type)
+        .map(({ body, ...meta }) => ({ ...meta, gist: mockGist(body) }))
+      mockRes(env, { items })
+      return
+    }
+    case IPC.MEMORY_GET: {
+      const { name } = env.payload as { name: string }
+      mockRes(env, { item: mockMemories.find((m) => m.name === name) ?? mockMemories[0] })
+      return
+    }
+    case IPC.MEMORY_DELETE: {
+      const { name } = env.payload as { name: string }
+      const i = mockMemories.findIndex((m) => m.name === name)
+      if (i >= 0) mockMemories.splice(i, 1)
+      mockRes(env, { ok: true })
+      return
+    }
+    case IPC.MEMORY_EDIT: {
+      const { name, body } = env.payload as { name: string; body?: string }
+      const item = mockMemories.find((m) => m.name === name)
+      if (item && body) item.body = body
+      mockRes(env, { ok: true })
+      return
+    }
+    case IPC.MEMORY_CLEAR: {
+      const { scope } = env.payload as { scope: string }
+      for (let i = mockMemories.length - 1; i >= 0; i--) {
+        if (scope === 'all' || mockMemories[i]!.type === scope) mockMemories.splice(i, 1)
+      }
+      mockRes(env, { ok: true, cleared: 0 })
+      return
+    }
     default:
       // 其余 req（LOGIN_REQUEST_CODE 等）一律回空 res：mock 只求 UI 不挂死在 15s 超时
       mockRes(env, {})

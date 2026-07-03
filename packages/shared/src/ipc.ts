@@ -2,7 +2,7 @@
 
 import type { TaskEvent, TaskRecord } from './task.js'
 import type { StagingPlan } from './staging.js'
-import type { ColdItemMeta, ColdType, Turn } from './memory.js'
+import type { ColdItem, ColdItemMeta, ColdType, Turn } from './memory.js'
 import type { Config } from './config.js'
 
 // ---------- §3.0 消息 Envelope（IPC 唯一封装） ----------
@@ -59,6 +59,7 @@ export const IPC = {
   REMINDER_STOP: 'REMINDER_STOP',
   REMINDER_FIRED: 'REMINDER_FIRED',
   MEMORY_LIST_GET: 'MEMORY_LIST_GET',
+  MEMORY_GET: 'MEMORY_GET',
   MEMORY_DELETE: 'MEMORY_DELETE',
   MEMORY_EDIT: 'MEMORY_EDIT',
   MEMORY_CLEAR: 'MEMORY_CLEAR',
@@ -127,6 +128,9 @@ export type ReminderFiredPayload = { kind: ReminderKind; phase?: string; petLine
 // 记忆类
 export type MemoryListGetPayload = { type?: ColdType }
 export type MemoryListGetRes = { items: ColdItemMeta[] }
+// SPEC-GAP: §3.1 消息表无单条记忆拉取，但 LIST 只回 gist（40 字截断），管理页编辑需要完整 body
+export type MemoryGetPayload = { name: string }
+export type MemoryGetRes = { item: ColdItem }
 export type MemoryDeletePayload = { name: string }
 export type MemoryEditPayload = { name: string; body?: string }
 export type MemoryClearPayload = { scope: 'all' | ColdType }

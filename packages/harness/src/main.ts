@@ -292,6 +292,11 @@ export function createHarness(emitLine: (line: string) => void) {
 
   // 记忆类
   router.onReq(IPC.MEMORY_LIST_GET, async (p: { type?: any }) => ({ items: cold.metas(p?.type) }))
+  router.onReq(IPC.MEMORY_GET, async (p: { name?: string }) => {
+    const item = cold.read(String(p?.name ?? ''))
+    if (!item) throw new IpcError('BAD_REQUEST', '记忆不存在')
+    return { item }
+  })
   router.onReq(IPC.MEMORY_DELETE, async (p: { name: string }) => {
     if (!cold.remove(String(p?.name ?? ''))) throw new IpcError('BAD_REQUEST', '记忆不存在')
     return { ok: true }
