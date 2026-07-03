@@ -1,5 +1,11 @@
 # M2 Task Board, Subagents, Approval, Undo
 
+> **Status (as of 2026-07-03):** M2 shipped and passed real-machine acceptance on
+> 2026-07-02; every mechanism below still reflects current code. M3 (scheduler,
+> heartbeat, Dream, memory manager) is documented separately in
+> [`packages/harness/src/scheduler/README.md`](../packages/harness/src/scheduler/README.md)
+> and [`docs/superpowers/plans/2026-07-03-m3-scheduler.md`](superpowers/plans/2026-07-03-m3-scheduler.md).
+
 This document is the human-facing reference for the M2 task board flow. The code
 contract still lives in `packages/shared`; this file explains how the pieces fit
 together and how to smoke-test them.

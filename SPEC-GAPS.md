@@ -63,10 +63,14 @@
 | # | 位置 | 缺口 | 采用默认 | 回填建议 |
 |---|---|---|---|---|
 | P1 ⭐ | bridge.rs | sidecar 二进制打包流程未做 | dev 用 `node packages/harness/dist/main.js`（PETSONA_HARNESS_CMD 可覆盖） | 发布流程补 Node SEA/pkg 打包与签名 |
-| P2 | macos/idle.rs | 全屏检测需 CGWindowList 遍历 | M1 恒 false | M3 fullscreenMute 落地时实现 |
+| P2 | macos/idle.rs | 全屏检测需 CGWindowList 遍历 | ✅ 已实现 CGWindowList 真检测（M3 fullscreenMute 已上线，遍历 kCGWindowLayer<0 判断存在全屏 App） | 无需回填 |
 | P3 | pet_window.rs | 规格未定义 PET_MOVED 后的壳层位置存储位置 | Tauri app data 写 `pet-window.json`，启动优先恢复；坐标越界则回右下角 | §4 补充宠物窗位置恢复策略与存储位置 |
 | P4 | pet_window.rs | NSPanel 桥失败降级为普通置顶窗口 | 已编译通过，降级仅为兜底 | 无需回填，保留兜底 |
 | P5 | icons/ | 正式图标未交付（美术任务，本轮排除） | 生成的占位 PNG | 美术 A 按 v3.0 A.4 交付 |
+| P6 ⭐ | ui/panel/kit.tsx | Tauri（macOS WKWebView）默认不实现 `window.prompt/confirm/alert`（静默返回 = 按钮点了没反应，第三轮真机验收踩过一次） | `<ModalHost>` + `useDialog()` 三方法自绘对话框（ESC/遮罩点击取消、Enter 提交、autoFocus），全部面板窗弹层必须走这里 | 规格 §4 面板窗节补「面板窗禁用浏览器原生弹层，走自绘对话框」硬约束 |
+| P7 | ui/lib/character.ts | Tauri WKWebView 不解码 VP9-alpha webm（黑底），美术给的透明底动画必须转码 | ffmpeg-static 转 HEVC-alpha .mov（配方注释在 character.ts 头部：`-c:v hevc_videotoolbox -alpha_quality 0.85 -pix_fmt bgra`）；Sprite onError 自动降级图集 | 规格 §4 美术素材节补「透明底动画交付前须转 HEVC-alpha .mov，禁用 VP9-alpha」 |
+| P8 | ui/pet/PetWindow.tsx | 规格 §4 只写「点击宠物弹菜单」，未定义单击/双击/拖拽三态区分 | 单击 → 播 wave 动作视频 3.5s → 回落 sit；双击 → 打开主面板；拖拽 → 位移 >4px 触发 wave 且整窗 startDragging；单双击互斥用 `setTimeout(260ms)` 延后 | 规格 §4 补桌宠交互三态语义（原「弹菜单」被验收否决，宠物 flex 上移只剩下半身且菜单本身冗余） |
+| P9 | ui/panel/panel.css + src-tauri/src/lib.rs | 面板窗尺寸规格未定，原实现 920×640 + `max-width:420` 手机比例居中，两侧 500px 留白 | 撑满窗口 + `@media(min-width:600px)` 仅浏览器原型走手机居中；`PANEL_WIDTH=440` `PANEL_HEIGHT=560` 贴内容 | 规格 §4 面板节补「桌面窗口尺寸贴内容，禁 iframe 预览式留白」 |
 
 ## 测试口径说明
 

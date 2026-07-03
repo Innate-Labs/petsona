@@ -12,7 +12,8 @@ macOS 桌宠 Agent（Tauri 壳 + Node Harness + 云网关）。运行/测试/接
 | `../宠格_Petsona_提示词体系_V0.1.md` | 13 个 prompt 定义 |
 | [SPEC-GAPS.md](SPEC-GAPS.md) | 规格空白的默认决策（30+ 条，回填规格前必读） |
 | [docs/M2_TASK_BOARD.md](docs/M2_TASK_BOARD.md) | M2 任务板、子 Agent、staging、审批、undo 机制与验收 |
-| [docs/HANDOFF.md](docs/HANDOFF.md) | 当前交接状态、真机 smoke check、M2 开工入口 |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | 当前交接状态、真机 smoke check、三轮验收修复清单、M4 入口 |
+| [packages/harness/src/scheduler/README.md](packages/harness/src/scheduler/README.md) | M3 调度器：cron/间隔/持久化/心跳/守卫 |
 | `../learn-claude-code-main/` | 机制编号出处（Python 教学参考，**不复用代码**） |
 
 ## 硬边界（违反即架构污染；tests/unit/structural.test.ts 机器强制）
@@ -30,6 +31,7 @@ macOS 桌宠 Agent（Tauri 壳 + Node Harness + 云网关）。运行/测试/接
 - vendor LLM SDK import 只许 `apps/gateway/src/providers/`（当前实现是 fetch 直连，零 SDK）。
 - 协议类型唯一真源 `packages/shared`，壳/harness/网关只 import **不复制**。
 - 埋点/兜底/权限是横切逻辑，走 hooks 管线（`hooks/pipeline.ts` 注册），**禁止**在技能或业务内重复实现。
+- **面板窗弹层**禁用 `window.prompt/confirm/alert`（Tauri WKWebView 静默返回 = 按钮点了没反应，第三轮踩过一次）；所有面板窗对话框走 `apps/shell/ui/panel/kit.tsx` 的 `useDialog()`（prompt/confirm/alert）。
 
 ## 开发标准
 
@@ -55,4 +57,4 @@ harness 其他 env：`PETSONA_HARNESS_CMD`（壳 spawn sidecar 的覆盖命令�
 
 ## 里程碑状态（写代码前必知）
 
-M1「会陪」与 M2「会干」核心已交付并于 2026-07-02 完成真机验收：任务板、子 Agent、staging 审批撤销闭环、最小审批面板（入口：设置中心）、`web_fetch` gateway 代理、4 个 ready 技能。验收暴露并修复的 8 个问题见 docs/HANDOFF.md 修复清单。调度器与心跳只有类型与目录（M3）；`dream()` 空实现（M3）。当前状态和下一步见 docs/HANDOFF.md。
+M1/M2/M3 核心均已交付并真机验收通过（2026-07-02 M1/M2 首轮 + 2026-07-03 M3 与 UI 三轮）。M3 落地：30s tick 调度器 + p01/p02 心跳 + `REMINDER_SET/STOP` + 消费器文案池直出 + 勿扰/全屏静默守卫 + 夜间 Dream 三层压缩 + 记忆管理页（`MEMORY_GET` 新协议）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移 + 宠物美术五姿势 HEVC-alpha .mov。M4 AudioProvider 未开工。三轮验收修复清单与当前入口见 docs/HANDOFF.md。
