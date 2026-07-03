@@ -39,7 +39,7 @@ pnpm dev:gateway
 cd apps/shell && pnpm tauri:dev
 ```
 
-登录：任意邮箱 + 验证码 `888888`（dev 固定码，正式码打印在网关日志）。
+登录：邮箱 + 密码单步（首次填即注册，密码 scrypt 落 `AUTH_STORE_FILE`）。老验证码路径仍保留（`/v1/auth/login` 双路径，tests 兼容），UI 不再暴露。
 
 ### 只调 UI（不起壳/harness）
 
@@ -49,19 +49,26 @@ pnpm --filter @petsona/shell dev   # 浏览器打开 5173，走内置 mock 总�
 
 ## 接入真实 LLM（DeepSeek / 任意 OpenAI 兼容 / Anthropic）
 
-网关 env（`apps/gateway/.env` 或环境变量）：
+**两种方式，二选一或叠加**：
+
+**方式 A · 管理员在 `apps/gateway/.env` 里配全局 key**（所有登录用户都用它）：
 
 ```bash
 LLM_PROVIDER=openai                    # mock | openai | anthropic（缺省 mock）
 LLM_MAIN_BASE_URL=https://api.deepseek.com
 LLM_MAIN_API_KEY=sk-...
-LLM_MAIN_MODEL=deepseek-chat
-LLM_CHEAP_BASE_URL=https://api.deepseek.com   # cheap 档（打标/摘要/气泡压缩）
+LLM_MAIN_MODEL=deepseek-chat           # 或 deepseek-v4-flash（reasoning 系，全链路已 wire）
+LLM_CHEAP_BASE_URL=https://api.deepseek.com   # cheap 档（打标/摘要/气泡压缩），未配自动降级复用主档
 LLM_CHEAP_API_KEY=sk-...
 LLM_CHEAP_MODEL=deepseek-chat
+AUTH_STORE_FILE=./.auth-store.json     # 强烈建议开启：refresh 白名单+密码 hash 落盘，避免网关热重载/重启导致登录失效
 ```
 
-密钥只进网关；harness/壳零密钥（token 存 macOS Keychain，service=`dev.petsona.app`）。
+**方式 B · 每个用户在设置里填自己的 key（BYOK）**：面板 → 设置中心 → AI 模型密钥 → 粘贴 DeepSeek key → 保存。密钥存 macOS Keychain（service=`dev.petsona.app`，account=`userLlmApiKey`），每次 chat 由 harness 以 `x-petsona-user-llm-key` header 透传网关，仅覆盖本请求（不缓存 provider，防跨请求泄漏）。目前 UI 上只支持 DeepSeek，后续开放其它模型。
+
+**Reasoning 模型**：`deepseek-v4-flash` / R1 系列的 `reasoning_content` 流全链路已支持（provider→SSE `event: reasoning`→harness `CHAT_REASONING` IPC→UI「宠物名 正在来的路上…」loading 指示）。思考流内容不外露给用户，仅作为占位反馈。详见 [SPEC-GAPS.md](SPEC-GAPS.md) S5/G14。
+
+密钥只进网关或本地 Keychain；harness/壳零明文（连自己的 access token 也存 Keychain）。
 
 ## 测试
 

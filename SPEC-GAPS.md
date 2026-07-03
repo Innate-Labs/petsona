@@ -11,6 +11,8 @@
 | S2 | tool.ts / llm.ts | §2.2 shared 文件清单未列这两个文件，但 ToolDef/网关协议属共享契约 | 归入 shared 新文件 | 规格 §2.2 文件清单补这两项 |
 | S3 | telemetry.ts | 批量上报阈值/间隔未定 | 20 条或 30s 先到先发，失败回缓冲上限 200 | 规格 §9 补数值 |
 | S4 | config.ts | 默认网关地址、番茄钟默认值未给 | dev `http://127.0.0.1:8787`；番茄钟 25/5 | 规格 §2.3 Config 补默认值表 |
+| S5 | llm.ts | reasoning 类模型（DeepSeek R1/v4-flash）思考流 `reasoning_content` 契约未定 | 新增 `LlmContentBlock: {type:'reasoning', text}` + `LlmSseReasoning`；语义：展示用，不回喂模型 | 规格 §3.2 SSE 帧节增加 reasoning 事件；`LlmContentBlock` 收录 reasoning 块（含"reasoning 是否入历史" 决策） |
+| S6 | ipc.ts | reasoning 流独立通道 + BYOK 用户 LLM key 管理 IPC 缺 | 新 `CHAT_REASONING` + `ChatReasoningPayload={turnId,delta}`；新 `LLM_KEY_GET/SET/CLEAR` + `LlmKeyGetRes={hasKey,maskedTail?}` | 规格 §3.1 消息表收录（含 GET 只回掩码防明文回带的硬约束） |
 
 ## packages/harness
 
@@ -57,6 +59,10 @@
 | G9 | routes/memory.ts | push/pull 区分方式未定 | body.mode 显式字段 | 规格 §3.2 定版（或拆两个端点） |
 | G10 | routes/track.ts | 埋点端点鉴权未定 | 不强制 Bearer（匿名设备起步） | 规格 §9 明确 |
 | G11 | 合规测试 | v2.1 原文 MUST 仅 7 条 | 第 8 条按「错误四码可区分」能力契约补齐 | 规格勘误 MUST 计数 |
+| G12 ⭐ | routes/auth.ts、auth/password.ts、auth/store.ts | 桌面暂无邮件服务，验证码流对用户不可用；规格未定义密码流 | 单步邮密登录：`/v1/auth/login` 接受 `{code}` 或 `{password}`；无 hash 首次视为"登录即注册/认领"，scrypt(N=16384,r=8,p=1,64B) 落 `AUTH_STORE_FILE`；错密码 401 `INVALID_CREDENTIALS`，`timingSafeEqual` 防时序 | 规格 §3.3 补桌面密码流；改密/重置流程与密码强度策略需另行拍板（当前 UI 前端最小 6 位） |
+| G13 ⭐ | routes/llm.ts、providers/factory.ts | BYOK：用户在设置里自带 LLM key 时，网关如何按请求覆盖默认 provider 未定义 | 请求 header `x-petsona-user-llm-key` 有值 → `createProvider(tier, {apiKeyOverride})` 走一次性 provider（**不缓存**，防跨请求泄漏）；仅 `LLM_PROVIDER=openai` 档支持 | 规格 §3.2 收录 BYOK header 名 + 覆盖语义；后续放开 Anthropic 时同法扩展 |
+| G14 | routes/llm.ts | reasoning 帧 `recordUsage` 是否触发未定 | 不 recordUsage（DeepSeek 上游 usage.completion_tokens 已含 reasoning+content，末帧 done 单独统计避免双记） | 规格 §3.2 补：reasoning 帧只走展示，不进计费/预算通路 |
+| G15 | auth/store.ts | `AUTH_STORE_FILE` 现在同时承担 refresh 白名单 + `passwordHash` 落盘；文件格式演进未定义 | `{users, refresh}` 数组元组 JSON，密码 hash 属 `User.passwordHash?`（老文件字段可空，兼容） | 规格 §3.3 收录：定文件 schema + 迁移路径（后续换 SQLite/Postgres 时按同 schema 迁） |
 
 ## apps/shell
 

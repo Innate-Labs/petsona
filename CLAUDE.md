@@ -24,7 +24,7 @@ macOS 桌宠 Agent（Tauri 壳 + Node Harness + 云网关）。运行/测试/接
 - **缝④**：本地数据一律 `$DATA/<userId>/` 命名空间。
 - companion 循环**禁止**注册重工具（registry 注册期抛错，名单在 shared/tool.ts）。
 - builtin L3 权限规则**不可**被 user 规则降级（`permission/rules.ts` 合并期抛错）。
-- token 只进 macOS Keychain（`security` CLI，service=`dev.petsona.app`），**禁落磁盘**。
+- token 与用户 LLM key 只进 macOS Keychain（`security` CLI，service=`dev.petsona.app`；accounts=`accessToken`/`refreshToken`/`userLlmApiKey`），**禁落磁盘**；GET 类 IPC 只回布尔+末四位掩码，禁回明文。
 - **禁任何 `rm`/直删**：$DATA 内清理走移动或 `.trash/`；对用户文件只有 `fs_trash`，且先进入 staging。
 - M2 文件写入/移动/重命名/回收必须先进 staging plan；真实文件只由 `APPROVAL_DECISION` apply，撤销走 undo journal。
 - `shell` 当前仍是即时执行工具，只能依赖 scope/permission/audit 与 builtin L3；不要假装它已纳入 staging。
@@ -54,8 +54,8 @@ Node 用 22.x（`better-sqlite3@11.10.0` native binding 与 Node 26 ABI 不兼�
 
 测试环境变量：`PETSONA_KEYCHAIN=memory`（免弹钥匙串）、`PETSONA_DATA_DIR=<tmp>`（隔离数据）、`PETSONA_GATEWAY_URL`。
 harness 其他 env：`PETSONA_HARNESS_CMD`（壳 spawn sidecar 的覆盖命令）、`PETSONA_ASSETS_DIR`、`PETSONA_LOG_LEVEL=debug`（res 附 hookTrace）。
-网关 LLM env 见 README「接入真实 LLM」。
+网关 LLM env 见 README「接入真实 LLM」。网关额外 env：`AUTH_STORE_FILE`（JSON 落盘 refresh 白名单 + 密码 hash，热重载/重启后登录态才不失效；`.gitignore` 已含 `.auth-store.json`）。BYOK 走 `x-petsona-user-llm-key` header，网关工厂遇 header 时构造一次性 provider **不缓存**。
 
 ## 里程碑状态（写代码前必知）
 
-M1/M2/M3 核心均已交付并真机验收通过（2026-07-02 M1/M2 首轮 + 2026-07-03 M3 与 UI 三~七轮）。M3 落地：30s tick 调度器 + p01/p02 心跳 + `REMINDER_SET/STOP` + 消费器文案池直出 + 勿扰/全屏静默守卫 + 夜间 Dream 三层压缩 + 记忆管理页（`MEMORY_GET` 新协议）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移 + 宠物美术五姿势 HEVC-alpha .mov。UI 侧经三~七轮定型桌宠交互（单击三动作轮换/双击开面板/拖拽 wave/🐾 缩放）、面板贴桌面窗口、待提醒到点气泡、提醒时长可调。M4 AudioProvider 未开工。验收修复清单与当前入口见 docs/HANDOFF.md。
+M1/M2/M3 核心均已交付并真机验收通过（2026-07-02 M1/M2 首轮 + 2026-07-03 M3 与 UI 三~七轮）。M3 落地：30s tick 调度器 + p01/p02 心跳 + `REMINDER_SET/STOP` + 消费器文案池直出 + 勿扰/全屏静默守卫 + 夜间 Dream 三层压缩 + 记忆管理页（`MEMORY_GET` 新协议）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移 + 宠物美术五姿势 HEVC-alpha .mov。UI 侧经三~七轮定型桌宠交互（单击三动作轮换/双击开面板/拖拽 wave/🐾 缩放）、面板贴桌面窗口、待提醒到点气泡、提醒时长可调。**2026-07-03 第四轮补丁**：DeepSeek 真接（`.env` + `load-env.ts`）、reasoning 模型全链路（`reasoning` block/SSE 帧/`CHAT_REASONING` IPC/loading 指示）、BYOK（Keychain + `x-petsona-user-llm-key` header + 工厂 override 不缓存）、邮箱+密码单步登录（scrypt + `AUTH_STORE_FILE`）、设置页 6 分区重设计、App icon（HEVC-alpha 抽帧 + `.icns` + adhoc 重签）。M4 AudioProvider 未开工。验收修复清单与当前入口见 docs/HANDOFF.md。

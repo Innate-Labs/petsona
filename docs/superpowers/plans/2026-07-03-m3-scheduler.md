@@ -100,7 +100,7 @@ describe('isValidCron', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/sunru/Desktop/桌宠Agent_1/petsona-desktop && npx vitest run tests/unit/scheduler.cron-expr.test.ts`
+Run: `cd "$(git rev-parse --show-toplevel)" && npx vitest run tests/unit/scheduler.cron-expr.test.ts`
 Expected: FAIL（模块不存在）
 
 - [ ] **Step 3: Write minimal implementation**

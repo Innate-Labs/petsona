@@ -28,6 +28,29 @@
 7. `core:default` 不含 `allow-start-dragging` → 桌宠/浮窗任何人都拖不动；已显式加权限，浮窗头部补 `data-tauri-drag-region`。
 8. `open_panel` 深链少 `#/panel/` 前缀 → 浮窗「历史」与桌宠菜单子页全部落回首页；现统一补前缀，窗口首建也带子页。
 
+## 第四轮：真接 LLM + BYOK + 密码登录 + reasoning（2026-07-03）
+
+1. **DeepSeek 接入**：`apps/gateway/src/load-env.ts`（Node 22 `process.loadEnvFile()` try/catch，`server.ts` 首行 import）+ `.env`（`.gitignore` 已忽略）；缺省模型 `deepseek-v4-flash`（reasoning 系）；`AUTH_STORE_FILE=./.auth-store.json` 让 refresh 白名单 + 密码 hash 跨热重载存活（tsx watch 每次改代码不再吞登录态）。
+2. **Reasoning 模型全链路**（观察于 `deepseek-v4-flash` 的 `delta.reasoning_content` 流式协议）：
+   - `packages/shared`：`LlmContentBlock` 加 `{type:'reasoning', text}`；新 `LlmSseReasoning`；`IPC.CHAT_REASONING` + `ChatReasoningPayload`。
+   - `apps/gateway`：`ProviderChunk` 加 `reasoning` 变体；`openai_compat.ts` 流式/非流式都读 `reasoning_content`；`routes/llm.ts` 派 SSE `event: reasoning`（**不 recordUsage**，避免与末帧 usage 双记）；`openai_convert.fromOaiMessage` 前置 reasoning 块。
+   - `packages/harness`：`ChatStreamCallbacks.onReasoning`；SSE 分派加 `case 'reasoning'`；companion.ts `emit(CHAT_REASONING)`（reasoning 不入 `roundText` 也不回喂模型）。
+   - `apps/shell/ui`：`ChatMsg.reasoning: boolean`（用户决定思考流不外露）；`reasoning && !text` 时渲染「{petName} 正在来的路上…」；发送即时 loading（`useChat.sendText` 立插 pending 宠物占位，`CHAT_SEND` res 到再 rekey，首字延迟从 500-2000ms 压到 0）；空 pill 条件短路防"只显示光标"。
+3. **BYOK（Bring Your Own Key）**：
+   - `IPC.LLM_KEY_GET/SET/CLEAR`（GET 只回 `{hasKey, maskedTail}` 防明文回带）；
+   - `GatewayClient` 加 `userLlmApiKey` 内存缓存 + Keychain 存取（account=`userLlmApiKey`，同 `dev.petsona.app` service）+ chat 请求带 `x-petsona-user-llm-key` header；
+   - 网关 `factory.createProvider(tier, {apiKeyOverride})` — override 有值时 **不缓存**，一次性构造，防跨请求泄漏；
+   - 设置页 AI 模型密钥分区：粘贴 → 保存到 Keychain；已有时展示末四位 `****xxxx`。
+4. **邮箱 + 密码单步登录**（替换 UI 验证码流；`/v1/auth/login` 双路径保留 code 让 auth.flow.test 兼容）：
+   - `apps/gateway/src/auth/password.ts` 新增 scrypt（Node stdlib，salt.hex.hash.hex，`timingSafeEqual`）；
+   - `User.passwordHash?` 落盘 `AUTH_STORE_FILE`；`setUserPassword` 首次登录写 hash（不覆盖）；
+   - `/v1/auth/login` 接受 `{code}`（老）或 `{password}`（新）；密码路径：无 hash 首次视为"登录即注册/认领"、有 hash 走 `verifyPassword` → 401 `INVALID_CREDENTIALS`；
+   - `LoginSubmitPayload.password?`；`GatewayClient.submitPassword`；`main.ts:LOGIN_SUBMIT` 按 payload 分派；
+   - `Login.tsx` 全重写为邮箱 + 密码单表单，无发送环节。
+5. **设置中心重设计**（`apps/shell/ui/panel/Settings.tsx` + `panel.css` 新分区样式）：AI 模型密钥 / 陪伴节奏（友好化"多久主动找我一次"）/ 文件权限 / 账号（登录邮箱 + 退出）/ 快捷入口（审批 & 记忆）/ 进阶（`gatewayUrl` 折叠）。
+6. **App 图标**：从 `apps/shell/ui/assets/characters/final-pet/sit.mov`（HEVC-alpha）用 `qlmanage -t -s 1024` 抽第 0 帧 → `sips -c 768 768` 中心裁剪保留耳朵→脚 → `-z 1024 1024` → 生成 10 尺 iconset → `iconutil -c icns` → 装两处：`src-tauri/icons/icon.png` 源图（下次 tauri:build）+ `Petsona.app/Contents/Resources/AppIcon.icns` + `Info.plist` 加 `CFBundleIconFile=AppIcon`。**关键坑**：cargo debug 出的 .app 签名是 `adhoc linker-signed`（`Info.plist=not bound`）；改 plist 后 macOS 判"tampered" → Finder 显示蓝图模板兜底。必须 `codesign --force --deep --sign - Petsona.app` 重签 + `killall Dock` + `lsregister -f` 让 LaunchServices 重读。
+7. **`jiumi` 终端启动器**（用户级 `~/.zshrc` shell 函数，非仓库文件）：`jiumi` 常规启动、`jiumi --logout` 清 Keychain token 后重启（用于看新登录页）、`jiumi --restart` 只重启、`jiumi --status` 只报状态。
+
 ## UI 真机验收修复（三~七轮，2026-07-03，以下为最终定型状态）
 
 宠物透明底先解决：原始 VP9-alpha webm 在 WKWebView 必黑底，改用 ffmpeg 转 HEVC-alpha .mov 接入五姿势（sit/wave/yawn/stretch/cheer），Sprite onError 自动降级图集兜底。随后经三~七轮迭代把交互与面板定型（逐轮过程见 git log `fix(shell): 第N轮`）：
@@ -46,7 +69,7 @@
 1. `pnpm dev:gateway`
 2. debug bundle：`cd apps/shell && pnpm tauri build --debug --bundles app`（MCP/自动化验收需要 bundle 注册 LaunchServices）
 3. `PETSONA_HARNESS_CMD="node <repo>/packages/harness/dist/main.js" ./apps/shell/src-tauri/target/debug/bundle/macos/Petsona.app/Contents/MacOS/petsona-shell`
-4. 任意邮箱登录，开发验证码 `888888`。
+4. 任意邮箱 + 任意 ≥6 位密码登录（首次即注册；老验证码路径仍可用：验证码字段填 `888888`，见 auth.flow.test）。
 5. 桌宠：单击 → 在 yawn/stretch/cheer 三动作间轮换（播放期不被打断）、双击 → 开主面板、拖拽 → 播 wave 且整窗跟手、悬停右下角 🐾 手柄 → 拖拽缩放（重启后尺寸/位置恢复）。
 6. 面板：Enter 输入框跳转对话页并发送；提醒页免打扰设置弹自绘对话框；记忆页编辑/删除/清空弹自绘对话框。
 7. 提醒：番茄钟开启 → 25min 后 REMINDER_FIRED 走宠物气泡；勿扰时段内被押回。
