@@ -52,7 +52,7 @@ function wrapIfPresent(tag: string, content: string): string {
   return content ? `<${tag}>\n${content}\n</${tag}>` : ''
 }
 
-function timeScene(): string {
+export function timeScene(): string {
   const h = new Date().getHours()
   const scene = h < 6 ? '深夜' : h < 9 ? '清晨' : h < 12 ? '上午' : h < 14 ? '午间' : h < 18 ? '下午' : h < 22 ? '晚上' : '深夜'
   return `现在是${scene}（${new Date().toLocaleString('zh-CN')}）`
