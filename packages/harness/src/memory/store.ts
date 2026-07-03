@@ -11,6 +11,7 @@ import { SessionsDb } from './sqlite.js'
 import { ColdFs, coldName } from './coldfs.js'
 import { assembleMemory } from './selection.js'
 import { extractColdItems } from './extraction.js'
+import { runDream } from './dream.js'
 
 export interface MemoryStore {
   assemble(triggers: string[]): PromptMemory
@@ -78,17 +79,23 @@ export class LocalMemoryStore implements MemoryStore {
     return extractColdItems(this.gateway, this.cold, preCompactSnapshot)
   }
 
-  /** M1 留空实现（M3 交付 Dream 全量：hot→warm→cold→consolidate→重建索引） */
+  /** 夜间 Dream（§3.8）：hot→warm→cold→consolidate→重建索引，逻辑在 dream.ts */
   async dream(): Promise<DreamReport> {
-    return {
-      ranAt: Date.now(),
-      hotCompacted: 0,
-      warmMerged: 0,
-      coldMergedDupes: 0,
-      coldEvicted: 0,
-      indexRebuilt: false,
-      durationMs: 0,
-    }
+    return runDream({
+      db: this.db,
+      cold: this.cold,
+      summarize: (text) => this.summarize(text),
+      writeCold: (body, topic) => {
+        this.cold.write({
+          name: this.uniqueName(coldName('fact', body)),
+          type: 'fact',
+          topic,
+          source: 'system',
+          lastT: new Date().toISOString(),
+          body,
+        })
+      },
+    })
   }
 
   // ---------- 压缩触发（继承 v2.1 升级④，单进程互斥 = JS 单线程天然满足） ----------
