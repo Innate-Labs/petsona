@@ -25,7 +25,7 @@
 | H7 | hooks/pre/injection_guard.ts、persona/enforce.ts | M1 允许 stub（v3.0 A.3） | 基础标记剥离已生效 | M2 交付完整策略（已在计划内，非缺口） |
 | H8 | tools/light read_context | M1 无窗口标题/选中文字（需 AX API） | 前台 App 名 + 剪贴板（<data> 包裹） | M2 屏幕问答一并交付（已在计划内） |
 | H9 | tools/light schedule_reminder | 各 kind 默认 cron 未给 | water 每小时、stand 45min、pomodoro 25min | 规格 §3.8 补默认 cron 表 |
-| H10 | main.ts 匿名→登录迁移 | M1 登录仅切换鉴权态，未做 anon 目录迁移 | 数据仍在 anon-<deviceId> 目录 | §2.3 迁移流程 M2 落地时对齐 §3.6 云同步 |
+| H10 | paths.ts applyPendingMigration | 桌面端 anon→login 本地目录迁移未定义（v2.1 §3.3.4 是服务端 SQL） | ✅ 下次启动落地：LOGIN_SUBMIT 写 `pending-migration.json`，重启时 `applyPendingMigration` 在打开任何句柄前 rename 目录；同账号复登归档到 `.trash/`（禁 rm）；目标位点被非目录占据→保 pending 下轮重试。userId = `user-sha256(email)[:12]` | 规格 §2.3 收录桌面迁移流程与 REMINDER_FIRED 借道机制 |
 | H11 ⭐ | tools/heavy shell | 任意 shell 命令如何进入 staging 未定义 | `shell` 即时执行，只走 scope/permission/audit 与 builtin L3；文件类重工具单独 staging | 规格 §3.5/§3.6 补命令级审批或限定 shell 用途 |
 | H12 | tools/heavy web_fetch | harness 不能直接出网，gateway 代理协议规格未定义 | 已实现 `POST /v1/proxy/fetch`（鉴权+SSRF 拦内网+10s 超时+字节上限），返回文本经 `<data>` 包裹入上下文 | 规格 §3.6 收录该协议定义 |
 | H13 | staging/store.ts | undo journal 保留/归档后台未定义 | 按 `UNDO_RETENTION_DAYS=7` 类型常量写 journal，不做自动清理 | 规格 §3.4 补归档触发与失败处理 |

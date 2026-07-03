@@ -6,7 +6,7 @@ import type { Emotion, Envelope, FileOp, StagingPlan, TaskResult } from '@petson
 import { IPC, TRACK } from '@petsona/shared'
 import { decodeLine, encodeLine, makeEvent } from './ipc/envelope.js'
 import { Router, IpcError } from './ipc/router.js'
-import { anonUserId, deviceId, resolvePaths } from './paths.js'
+import { anonUserId, applyPendingMigration, dataRoot, deviceId, resolvePaths, writePending } from './paths.js'
 import { bootstrapAssets } from './bootstrap.js'
 import { ConfigStore } from './config.js'
 import { GatewayClient } from './gateway/client.js'
@@ -54,7 +54,9 @@ export function createHarness(emitLine: (line: string) => void) {
   }
 
   // ---- 状态与存储 ----
-  const userId = anonUserId()                     // 登录后迁移目录（§2.3）——M1 匿名目录起步，登录仅切换鉴权态
+  // 启动前先跑一次目录迁移（H10 / §2.3）：任何 SQLite/文件句柄打开之前落地，避免热切
+  const anon = anonUserId()
+  const userId = applyPendingMigration(dataRoot(), anon)
   const paths = resolvePaths(userId)
   bootstrapAssets(paths)
   const config = new ConfigStore(paths)
@@ -339,6 +341,15 @@ export function createHarness(emitLine: (line: string) => void) {
     authState = { loginState: 'logged_in', email: res.email }
     emit({ type: IPC.AUTH_STATE_CHANGED, payload: authState })
     tracker.track(TRACK.登录, {})
+    // H10：匿名态首次登录 → 记账下次启动迁移目录（同账号复登也记，applyPending 会归档 anon）
+    if (userId.startsWith('anon-')) {
+      const pending = writePending(dataRoot(), userId, res.email)
+      // SPEC-GAP: AUTH_STATE_CHANGED 无 pendingRestart 字段；用 REMINDER_FIRED 借道提示重启（面板已订阅）
+      emit({ type: IPC.REMINDER_FIRED, payload: {
+        kind: 'system', phase: 'restart_to_migrate',
+        petLine: `记住你啦！重启一下我就把这里的宠物记忆搬到你账号下（user-${pending.to.slice(5, 9)}…）`,
+      } })
+    }
     return { ok: true, email: res.email }
   })
   // 为什么要有 pull 口：harness 启动恢复登录态的广播可能早于面板 webview 订阅，
