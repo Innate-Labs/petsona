@@ -1,66 +1,63 @@
 // pet/Sprite.tsx —— 宠物形象渲染：情绪→语义姿势→当前角色资产（视频优先，图集兜底）
 // 角色可插拔：本组件不 import 任何具体美术资产（lib/character.ts 是唯一出口）。
 //
-// 防空窗：双缓冲换源——新姿势视频没 fire onPlaying 之前，旧视频保持可见。WKWebView 对
-// <video> key 重挂载后要重新走 加载→解码→起播，中间有几百毫秒透明空窗，快速切换肉眼即
-// 「宠物消失」。新源若一直不起播，旧源就一直播着（画面永不空）；只有真正 fire error 的源
-// 才按 pose→sit→图集 逐级回退。
-// ⚠️ 不要加「起播超时判坏源」的看门狗：冷启动首个视频经 tauri 协议加载常超 1.5s，
-//    第四轮实测会被误判永久回退到旧图集（用户报「宠物变回以前的形象」）。
+// 防空窗定案（第五轮）：全部姿势视频**常驻同播**，切姿势只切透明度。
+// 前两版的教训：a) key 重挂载换源 → WKWebView 重走加载/解码，必有透明空窗；
+// b) 双缓冲若给垫底元素换 key，React 视为新元素照样重挂载，两路一起空窗；
+// c)「起播超时判坏源」看门狗在冷启动被 tauri 协议的首载耗时误伤，永久回退旧图集。
+// 常驻同播后视频元素从不重建，切换零加载零空窗；素材共 ~10MB 本地资产，硬解常驻可接受。
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Emotion } from '@petsona/shared'
 import { EMOTION_META } from '../lib/emotion'
-import { poseStyle, poseVideo } from '../lib/character'
+import { CHARACTER, poseStyle, poseVideo } from '../lib/character'
 import type { PoseName } from '../lib/character'
 
 function PoseMedia({ pose }: { pose: PoseName }) {
   const [brokenSrcs, setBrokenSrcs] = useState<string[]>([])
-  // 最近一次确认起播成功的源：换源期间它就是「垫底画面」
-  const [playingSrc, setPlayingSrc] = useState<string | null>(null)
-
-  const markBroken = (src: string) =>
-    setBrokenSrcs((prev) => (prev.includes(src) ? prev : [...prev, src]))
+  const refs = useRef(new Map<string, HTMLVideoElement>())
+  // 去重后的全部姿势视频 URL（多个姿势可能回落到同一文件）；角色不变则终身稳定
+  const allSrcs = useMemo(() => [...new Set(Object.values(CHARACTER.videos ?? {}))], [])
 
   const want = poseVideo(pose)
   const sitSrc = poseVideo('sit')
-  const src =
+  const active =
     want && !brokenSrcs.includes(want) ? want : sitSrc && !brokenSrcs.includes(sitSrc) ? sitSrc : null
 
-  if (!src) return <div className="sprite-img" style={poseStyle(pose)} />
+  useEffect(() => {
+    // 动作从头播：切过去的瞬间把目标视频拨回第 0 帧（已解码，seek 即时）
+    const el = active ? refs.current.get(active) : undefined
+    if (!el) return
+    try {
+      el.currentTime = 0
+    } catch {
+      // 元数据未就绪时 seek 会抛，忽略——首播本来就是第 0 帧
+    }
+    void el.play().catch(() => {})
+  }, [active])
 
-  const swapping = playingSrc !== null && playingSrc !== src
+  if (!active || allSrcs.length === 0) return <div className="sprite-img" style={poseStyle(pose)} />
+
   return (
     <>
-      {/* 换源期间垫底的旧源：新源起播后随下一次渲染卸载 */}
-      {swapping && (
+      {allSrcs.map((s) => (
         <video
-          className="sprite-video"
-          key={`old-${playingSrc}`}
-          src={playingSrc}
+          key={s}
+          ref={(el) => {
+            if (el) refs.current.set(s, el)
+            else refs.current.delete(s)
+          }}
+          className="sprite-video sprite-video--layer"
+          style={{ opacity: s === active ? 1 : 0 }}
+          src={s}
           autoPlay
           loop
           muted
           playsInline
           disablePictureInPicture
+          onError={() => setBrokenSrcs((prev) => (prev.includes(s) ? prev : [...prev, s]))}
         />
-      )}
-      <video
-        className="sprite-video"
-        // key 换源强制重载：同一 <video> 改 src 在部分 WebKit 上不重新起播
-        key={src}
-        src={src}
-        // 新源未起播前叠在旧源上隐身等待，起播即接管
-        style={swapping ? { position: 'absolute', inset: 0, opacity: 0 } : undefined}
-        autoPlay
-        loop
-        muted
-        playsInline
-        disablePictureInPicture
-        onPlaying={() => setPlayingSrc(src)}
-        onLoadedData={() => setPlayingSrc(src)}
-        onError={() => markBroken(src)}
-      />
+      ))}
     </>
   )
 }

@@ -14,13 +14,21 @@ import iconExpand from '../assets/figma/icon-expand-18.svg'
 import iconDelete from '../assets/figma/icon-delete-28.svg'
 import iconCheck from '../assets/figma/icon-check.svg'
 
-type CardDef = { kind: ReminderKind; title: string; value: string }
+type TimedKind = 'pomodoro' | 'water' | 'stand'
+type CardDef = { kind: TimedKind; title: string }
 
 const CARDS: CardDef[] = [
-  { kind: 'pomodoro', title: '番茄钟', value: '25:00' },
-  { kind: 'water', title: '喝水提醒', value: '32:00' },
-  { kind: 'stand', title: '站立提醒', value: '60:00' },
+  { kind: 'pomodoro', title: '番茄钟' },
+  { kind: 'water', title: '喝水提醒' },
+  { kind: 'stand', title: '站立提醒' },
 ]
+
+// 点击卡面时间给的时长选项（分钟）；写回 config.reminders，调度器实时读取
+const DURATION_OPTIONS: Record<TimedKind, string[]> = {
+  pomodoro: ['15 分钟', '25 分钟', '45 分钟', '60 分钟'],
+  water: ['30 分钟', '45 分钟', '60 分钟', '90 分钟', '120 分钟'],
+  stand: ['30 分钟', '45 分钟', '60 分钟', '90 分钟'],
+}
 
 // 半小时粒度 48 个时间点：用户只挑不填（第四轮验收：免打扰不要手写时间）
 const TIME_OPTS = Array.from({ length: 48 }, (_, i) => {
@@ -74,13 +82,21 @@ export function Reminders() {
   const [todos, setTodos] = useState<TodoItem[]>(loadTodos)
   const [quiet, setQuiet] = useState<[string, string] | null>(null)
   const [quietEditing, setQuietEditing] = useState(false)
+  const [mins, setMins] = useState<Record<TimedKind, number> | null>(null)
   const [todoOpen, setTodoOpen] = useState(true)
   const [note, setNote] = useState('')
   const dialog = useDialog()
 
   useEffect(() => {
     void request<ConfigGetRes>(IPC.CONFIG_GET, {})
-      .then(({ config }) => setQuiet(config.proactive.quietHours))
+      .then(({ config }) => {
+        setQuiet(config.proactive.quietHours)
+        setMins({
+          pomodoro: config.reminders.pomodoro.focusMin,
+          water: config.reminders.waterMin,
+          stand: config.reminders.standMin,
+        })
+      })
       .catch(() => {})
     // 提醒触发时刷新一行文案，让页面「活」——气泡另由宠物窗展示
     return on<ReminderFiredPayload>(IPC.REMINDER_FIRED, (p) => setNote(p.petLine))
@@ -97,6 +113,38 @@ export function Reminders() {
       const payload: ReminderSetPayload = { kind }
       void request(IPC.REMINDER_SET, payload).catch(() => {})
     }
+  }
+
+  // 点击卡面时间 → 时长选项 → 写回 config（调度器实时读）；番茄钟进行中则重启会话让新时长立即生效
+  const editDuration = (kind: TimedKind) => {
+    const cur = mins?.[kind]
+    void dialog
+      .prompt({
+        title: `${CARDS.find((c) => c.kind === kind)!.title}时长`,
+        options: DURATION_OPTIONS[kind],
+        defaultValue: cur ? `${cur} 分钟` : undefined,
+      })
+      .then((v) => {
+        const n = v ? Number.parseInt(v, 10) : Number.NaN
+        if (!Number.isFinite(n) || n <= 0) return
+        setMins((m) => (m ? { ...m, [kind]: n } : m))
+        return request<ConfigGetRes>(IPC.CONFIG_GET, {})
+          .then(({ config }) => {
+            const reminders =
+              kind === 'pomodoro'
+                ? { ...config.reminders, pomodoro: { ...config.reminders.pomodoro, focusMin: n } }
+                : { ...config.reminders, [kind === 'water' ? 'waterMin' : 'standMin']: n }
+            const patch: Partial<Config> = { reminders }
+            return request(IPC.CONFIG_SET, { patch })
+          })
+          .then(() => {
+            // 番茄钟时长存在会话 payload 里（H18），进行中改时长要重启会话；water/stand 实时读 config 无需重启
+            if (kind === 'pomodoro' && prefs.reminders.pomodoro) {
+              return request(IPC.REMINDER_STOP, { kind }).then(() => request(IPC.REMINDER_SET, { kind }))
+            }
+          })
+      })
+      .catch(() => {})
   }
 
   const applyQuietHours = (next: [string, string] | null) => {
@@ -133,7 +181,13 @@ export function Reminders() {
           return (
             <div key={c.kind} className={`remind-card${c.kind === 'pomodoro' && running ? ' remind-card--active' : ''}`}>
               <p className="remind-card-title">{c.title}</p>
-              <div className="remind-card-value">{c.value}</div>
+              <button
+                className="remind-card-value remind-card-value--btn"
+                title="点击调整时长"
+                onClick={() => editDuration(c.kind)}
+              >
+                {mins ? `${mins[c.kind]}:00` : '—'}
+              </button>
               <div className="remind-card-chips">
                 <span className={`chip ${running ? 'chip--doing' : 'chip--off'}`}>{running ? '进行中' : '已关闭'}</span>
                 <button className="chip" onClick={() => toggle(c.kind)}>
@@ -156,7 +210,7 @@ export function Reminders() {
       </div>
 
       <div className="section-head" style={{ marginTop: 12 }}>
-        Todo
+        待提醒
         <img
           src={iconExpand}
           alt="展开/收起"
@@ -180,7 +234,7 @@ export function Reminders() {
             </button>
           </div>
         ))}
-      {todoOpen && todos.length === 0 && <div className="placeholder">还没有待办，点右下角 + 加一条～</div>}
+      {todoOpen && todos.length === 0 && <div className="placeholder">还没有待提醒的事，点右下角 + 加一条～</div>}
       {note && <div className="float-tooling" style={{ padding: '8px' }}>{note}</div>}
       <button className="fab" onClick={addTodo} aria-label="新增待办">
         +

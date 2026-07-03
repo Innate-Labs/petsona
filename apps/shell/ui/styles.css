@@ -191,6 +191,12 @@ select:focus {
   pointer-events: none; /* 点击穿透给 .sprite-hit，拖动/菜单手势不被 video 吃掉 */
 }
 
+/* 常驻同播层：全部姿势视频叠在 .sprite 里，只有 active 那层 opacity 1（切换零重载零空窗） */
+.sprite-video--layer {
+  position: absolute;
+  inset: 0;
+}
+
 /* 地面椭圆影（Figma Ellipse 3）：按 sprite 比例走，窗口缩放时影子跟着变 */
 .sprite-shadow {
   position: absolute;

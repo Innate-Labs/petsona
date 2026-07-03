@@ -487,6 +487,22 @@ body[data-host='web'] .panel-shell {
   font-size: 18px;
 }
 
+/* 卡面时间按钮化（点击弹时长选项）：剥掉按钮默认皮，保持数字观感，hover 下划线示意可点 */
+.remind-card-value--btn {
+  display: block;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.remind-card-value--btn:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+
 .remind-card-chips {
   position: absolute;
   left: 15px;
