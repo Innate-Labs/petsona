@@ -1,14 +1,20 @@
 // lib/character.ts —— 宠物角色唯一定义点（美术可插拔）
 // 换角色只动本文件 + assets/characters/<id>/ 资产，业务组件一律经此取形象。
-// 最终角色格式 = 逐动作透明底视频（action-<动作>.webm，如 action-sitting）；
-// 图集（sheet）保留作为视频不可用时的兜底（macOS WKWebView 对 webm/alpha 支持
-// 存疑，见 DESIGN.md「宠物角色」节——若真机不可解码由 Sprite 自动降级）。
+// 最终角色格式 = 逐动作透明底视频 HEVC-alpha .mov（WKWebView 不解码 webm/alpha，
+// 原始 VP9 webm 会黑底；源片在仓库外「宠物角色美术/」，用 ffmpeg 转码：
+// ffmpeg -c:v libvpx-vp9 -i in.webm -c:v hevc_videotoolbox -allow_sw 1 \
+//   -alpha_quality 0.85 -q:v 60 -vtag hvc1 -pix_fmt bgra out.mov）。
+// 图集（sheet）保留作为视频不可用时的兜底（Sprite onError 自动降级）。
 // SPEC-GAP: 角色选择将来应入 Config（harness 持久化），M1 单角色常量即可。
 
 import type { CSSProperties } from 'react'
 import draftSheetUrl from '../assets/characters/draft-cat/sheet.png'
 import draftAvatarUrl from '../assets/characters/draft-cat/avatar.png'
-import sitVideoUrl from '../assets/characters/final-pet/sit.webm'
+import sitVideoUrl from '../assets/characters/final-pet/sit.mov'
+import waveVideoUrl from '../assets/characters/final-pet/wave.mov'
+import yawnVideoUrl from '../assets/characters/final-pet/yawn.mov'
+import stretchVideoUrl from '../assets/characters/final-pet/stretch.mov'
+import cheerVideoUrl from '../assets/characters/final-pet/cheer.mov'
 
 /** 语义姿势：业务/情绪层只认这些名字，不认资产形态（视频/图集格位） */
 export type PoseName = 'sit' | 'wave' | 'sleep' | 'eat' | 'stretch' | 'cheer' | 'tilt' | 'yawn'
@@ -52,13 +58,18 @@ const DRAFT_CAT: PetCharacter = {
   ...DRAFT_SHEET,
 }
 
-/** 最终定稿角色（视频动作，占位接入中）：目前仅 action-sitting 到货，
-    其余动作视频与专属头像/人设待用户投喂后补齐本定义。 */
+/** 最终定稿角色（透明底动作视频）：
+    默认坐着→sit、点击拖拽→wave、打哈欠→yawn、伸懒腰→stretch、舔爪子→cheer；
+    sleep（睡觉）视频待用户投喂后补齐（缺姿势自动回落 sit）。 */
 const FINAL_PET: PetCharacter = {
   ...DRAFT_CAT,
   id: 'final-pet',
   videos: {
     sit: sitVideoUrl,
+    wave: waveVideoUrl,
+    yawn: yawnVideoUrl,
+    stretch: stretchVideoUrl,
+    cheer: cheerVideoUrl,
   },
 }
 
