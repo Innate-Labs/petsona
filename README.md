@@ -1,103 +1,123 @@
-# 宠格 Petsona · 桌面版
+<p align="center">
+  <img src="apps/shell/src-tauri/icons/icon.png" width="180" alt="宠格 Petsona"/>
+</p>
 
-macOS 桌面常驻的「上班搭子」宠物：人格聊天 + 记忆 + 任务板 + 审批式文件改动 + 30s 调度 + 主动心跳 + 夜间 Dream。
-唯一规格真源：《桌面版开发规格说明书 v3.0》；本仓库已交付 M1「会陪」+ M2「会干」+ M3「会提醒·会梦」，M4 AudioProvider 未开工。
+<h1 align="center">宠格 Petsona</h1>
 
-## 架构
+<p align="center">
+  <b>一款陪伴你、也能帮你干活的 macOS 桌面 AI 宠物</b><br/>
+  <sub>会聊天 · 有记忆 · 能主动关心你 · 会审批式地帮你整理文件</sub>
+</p>
 
-```
-壳 Tauri v2（NSPanel 宠物窗 + 面板 + 托盘 + watchdog）
-   ⇅ NDJSON over stdio（Envelope §3.0）
-本地 Harness（Node sidecar：陪伴循环 s01 + 8 轻工具 + hooks s04 + 记忆 s09 + 压缩 s08）
-   ⇅ HTTPS（唯一出口 gateway/client.ts，缝①）
-云网关（Fastify：/v1/llm/chat SSE + /v1/auth/* + /v1/memory/sync + /v1/track/batch）
-```
+---
 
-## 目录
+## 🐾 它是什么
 
-- `packages/shared` — 协议类型唯一真源（壳/harness/网关只 import 不复制）
-- `packages/harness` — 本地运行时（sidecar）
-- `packages/assets` — 首装拷贝到 $DATA 的技能/人格/兜底文案池
-- `apps/shell` — Tauri 壳（src-tauri Rust + ui React）
-- `apps/gateway` — 云网关
-- `tests` — 结构性约束 / 工具契约 / M2 任务板与 staging / M3 调度器与心跳 / Dream / Gate ①②③⑤ 自动化（helpers 含 mock 网关；当前 164 用例）
-- `docs/M2_TASK_BOARD.md` — M2 任务板、子 Agent、staging、审批、undo 机制与验收
-- `docs/HANDOFF.md` — 当前交接状态、真机 smoke check、下一阶段入口
+宠格 Petsona 是一只常驻你 macOS 桌面的 AI 小宠物。它不是纯观赏摆件，而是一个真能帮你干活的桌面 Agent：
 
-## 快速开始
+- 像跟朋友一样跟它聊天，接你自己的 DeepSeek key（也可以用管理员默认）。
+- 它会记住你说过的偏好、日常习惯，聊得越久越懂你。
+- 它会在你专注、久坐、久没喝水的时候主动出现（可关，可设勿扰时段）。
+- 它想动你桌面/下载里的文件，必须先给你看改动草稿，你点通过它才真的落盘——并且能一键撤销。
 
-建议使用 Node 22.x；当前依赖 `better-sqlite3@11.10.0` 与 Node 26 native ABI 不兼容。
+## ✨ 主要功能
+
+### 陪伴与聊天
+- 桌面常驻小猫：单击换动作 / 双击开面板 / 拖拽跟手挥手 / 右下角 🐾 手柄缩放窗口
+- 邮箱 + 密码单步登录（首次填即注册），流式回复
+- 支持 DeepSeek（含 reasoning 系 `deepseek-v4-flash` / R1）、任意 OpenAI 兼容上游、Anthropic
+- 情绪机：随对话切换宠物姿态；思考型模型「正在来的路上…」占位反馈
+
+### 记忆
+- 三层记忆结构：热对话 → 温热档案 → 冷长期记忆
+- 记忆管理页可查看 / 编辑 / 删除 / 分类清空
+- 夜间「Dream」自动压缩合并 + 索引重建，第二天精简干净
+
+### 帮你干活（任务板 + 审批式改文件）
+- 交给它一个目标，它拆解成计划 → 执行 → 你审批 → 才落盘
+- 想改的每个文件都以「暂存草稿」形式先给你看
+- 撤销按钮可恢复到执行前的原始内容
+- 内置 4 个技能：整理文件 / 清理回收站 / 查东西 / 屏幕问答（macOS Vision OCR）
+- 8 个轻工具（读上下文、记备忘、发提醒、fetch 网页等）
+
+### 提醒与守卫
+- 每 30 秒调度一次，到点主动气泡提醒
+- 番茄钟 / 喝水 / 起来动动 三条提醒线可配
+- 免打扰时段、你在全屏工作 / 看视频时它自动闭嘴
+- 提醒时长在设置里可调
+
+### 隐私与安全
+- 所有密钥（登录 token、你的 LLM API key）只进 macOS Keychain，永不落磁盘
+- 本地数据在 `~/Library/Application Support/Petsona/`，人类可读，随时可备份或删
+- Harness 侧禁止直连外网，网络出口只走唯一云网关
+- 「删」都不用 `rm`，走回收站或 undo journal
+
+## 🚀 快速上手
+
+**目前是开发预览阶段，需要克隆源码本地跑（安装包尚未打包分发）。**
 
 ```bash
+git clone https://github.com/Innate-Labs/petsona.git
+cd petsona
 pnpm install
-pnpm build                 # shared → harness → gateway
+pnpm build
 
-# 终端 1：网关（默认 8787，Mock LLM）
+# 终端 1：起云网关（:8787）
 pnpm dev:gateway
 
-# 终端 2：桌面 App（自动 spawn harness sidecar）
+# 终端 2：起桌面 App
 cd apps/shell && pnpm tauri:dev
 ```
 
-登录：邮箱 + 密码单步（首次填即注册，密码 scrypt 落 `AUTH_STORE_FILE`）。老验证码路径仍保留（`/v1/auth/login` 双路径，tests 兼容），UI 不再暴露。
+打开 App 后：邮箱 + ≥6 位密码登录 → 面板「设置中心」→ 填你自己的 DeepSeek API Key（[platform.deepseek.com](https://platform.deepseek.com) 领取）→ 回到聊天页跟它说话就行。
 
-### 只调 UI（不起壳/harness）
+想给所有用户配全局默认 key（BYOK 未填时的兜底），在 `apps/gateway/.env` 里配 `LLM_MAIN_API_KEY` 等，见 [CLAUDE.md](CLAUDE.md)。
 
-```bash
-pnpm --filter @petsona/shell dev   # 浏览器打开 5173，走内置 mock 总线
+- 只调 UI（不起壳/harness，浏览器 mock 总线）：`pnpm --filter @petsona/shell dev`
+- Node 版本要 **22.x**（`better-sqlite3@11.10.0` native binding 要求）
+
+## 🗺 路线图
+
+**已交付**：
+- ✅ **M1 会陪** —— 登录 / 流式聊天 / 情绪机 / 桌宠拖动与位置恢复 / 快捷浮窗
+- ✅ **M2 会干** —— 任务板 + 子 Agent + 文件类工具暂存审批 + undo journal + 4 技能 + gateway 代理网络出口
+- ✅ **M3 会提醒·会梦** —— 30s 调度器 + 心跳 + 三条提醒线 + 夜间 Dream 记忆压缩 + 记忆管理页 + macOS 全屏检测 + 匿名→登录目录迁移
+- ✅ **2026-07-03 第四轮** —— 真接 DeepSeek + reasoning 模型全链路（v4-flash / R1）+ BYOK 用户自带 key + 邮箱密码单步登录 + 设置中心 6 分区重设计 + 宠物图标（宠物角色 sit.mov 抽帧）
+
+**规划中**：
+- 🚧 **M4 语音** —— AudioProvider（TTS 朗读 + 唤醒词 STT）
+- 🚧 **打包分发** —— sidecar Node SEA/pkg 打包 & 签名，用户下载 .dmg 即用（不再需要克隆源码）
+- 🚧 **改密码 / 找回密码流程** —— 目前只支持首次注册即登录
+- 🚧 **生产化** —— 真实邮件服务 + Redis/Postgres 存储替换单机内存 Map
+- 🚧 **美术补齐** —— 表情帧、场景道具、sleep 姿势 HEVC-alpha .mov
+- 🚧 **Windows / Linux 移植** —— 现只跑 macOS（Tauri 底子已跨端，但 NSPanel 宠物窗与 macOS Vision OCR 是 mac 专属）
+
+## 🛠 技术架构
+
+```
+壳 Tauri v2（NSPanel 宠物窗 + 面板 + 托盘 + watchdog）
+   ⇅ NDJSON over stdio
+本地 Harness（Node sidecar：陪伴循环 + 8 轻工具 + hooks + 三层记忆）
+   ⇅ HTTPS（唯一出口）
+云网关（Fastify：/v1/llm/chat SSE + /v1/auth/* + /v1/memory/sync + /v1/track/batch）
 ```
 
-## 接入真实 LLM（DeepSeek / 任意 OpenAI 兼容 / Anthropic）
+- **前端壳**：Tauri 2（Rust）+ React 18 + Vite
+- **本地运行时**：Node 22 sidecar + better-sqlite3（三层记忆存储）
+- **云网关**：Fastify + jsonwebtoken（JWT）
+- **LLM**：不用任何 vendor SDK，直接 fetch OpenAI 兼容 API；reasoning 模型全链路（`reasoning_content` 独立 SSE 事件 → IPC → UI loading）
+- **测试**：Vitest，覆盖结构约束 / 工具契约 / 任务板 / staging / Gate ①②③⑤ 等 164 用例
 
-**两种方式，二选一或叠加**：
+深入了解：
+- [快速开始与开发指南 · CLAUDE.md](CLAUDE.md)
+- [架构交接与真机验收清单 · docs/HANDOFF.md](docs/HANDOFF.md)
+- [M2 任务板机制 · docs/M2_TASK_BOARD.md](docs/M2_TASK_BOARD.md)
+- [规格空白决策 · SPEC-GAPS.md](SPEC-GAPS.md)
 
-**方式 A · 管理员在 `apps/gateway/.env` 里配全局 key**（所有登录用户都用它）：
+## 📄 License
 
-```bash
-LLM_PROVIDER=openai                    # mock | openai | anthropic（缺省 mock）
-LLM_MAIN_BASE_URL=https://api.deepseek.com
-LLM_MAIN_API_KEY=sk-...
-LLM_MAIN_MODEL=deepseek-chat           # 或 deepseek-v4-flash（reasoning 系，全链路已 wire）
-LLM_CHEAP_BASE_URL=https://api.deepseek.com   # cheap 档（打标/摘要/气泡压缩），未配自动降级复用主档
-LLM_CHEAP_API_KEY=sk-...
-LLM_CHEAP_MODEL=deepseek-chat
-AUTH_STORE_FILE=./.auth-store.json     # 强烈建议开启：refresh 白名单+密码 hash 落盘，避免网关热重载/重启导致登录失效
-```
+暂未选定开源 License；使用 / 二次开发前请联系 Innate Labs。
 
-**方式 B · 每个用户在设置里填自己的 key（BYOK）**：面板 → 设置中心 → AI 模型密钥 → 粘贴 DeepSeek key → 保存。密钥存 macOS Keychain（service=`dev.petsona.app`，account=`userLlmApiKey`），每次 chat 由 harness 以 `x-petsona-user-llm-key` header 透传网关，仅覆盖本请求（不缓存 provider，防跨请求泄漏）。目前 UI 上只支持 DeepSeek，后续开放其它模型。
+---
 
-**Reasoning 模型**：`deepseek-v4-flash` / R1 系列的 `reasoning_content` 流全链路已支持（provider→SSE `event: reasoning`→harness `CHAT_REASONING` IPC→UI「宠物名 正在来的路上…」loading 指示）。思考流内容不外露给用户，仅作为占位反馈。详见 [SPEC-GAPS.md](SPEC-GAPS.md) S5/G14。
-
-密钥只进网关或本地 Keychain；harness/壳零明文（连自己的 access token 也存 Keychain）。
-
-## 测试
-
-```bash
-pnpm test        # 全量：结构性约束/工具契约/任务板/staging/合规/Gate
-```
-
-- **结构性约束（§10）**：companion 禁注册重工具、builtin L3 不可降级、harness 网络出口唯一、vendor SDK 隔离、token 禁落盘
-- **M1 Gate**：① 登录→流式聊天 ② 断 LLM 兜底文案轮换 ③ 重启记忆三层存活 ④ IPC 全消息表（占位可） ⑤ hooks 全挂载 ⑥ 即上面结构性约束
-- **M2 任务板单测**：`tests/unit/tasks.board.test.ts` 覆盖落盘、worker 串行、TASK_EVENT、取消与 scope 拦截。
-- **M3 调度器/心跳/Dream**：`tests/unit/scheduler.*.test.ts`（cron/间隔/守卫/心跳/文案池/队列/持久化）+ `tests/unit/memory.dream.test.ts` + `tests/e2e/scheduler.test.ts`（REMINDER_FIRED + 气泡）。
-- **M2 staging 单测**：`tests/unit/staging.store.test.ts` 覆盖 staged write/trash、apply 和 undo；`tests/unit/subagent.executor.test.ts` 覆盖 subagent tool loop。
-- 测试环境变量：`PETSONA_KEYCHAIN=memory`（避免弹钥匙串）、`PETSONA_DATA_DIR`（隔离数据目录）
-- 当前机器若使用 Node 26，sqlite-backed tests 会因 `better-sqlite3` ABI 不匹配失败；使用 Node 22 跑全量。
-
-## $DATA 布局
-
-`~/Library/Application Support/Petsona/<userId>/`（dev 可用 `PETSONA_DATA_DIR` 覆盖）：
-config.json / persona.json / skills/ / personas/ / memory/{MEMORY.md,cold/*.md,sessions.db} /
-tasks/ / staging/ / plans/ / undo/ / scheduled.json / outputs/ / logs/audit.jsonl —— 全部人类可读可备份。
-
-## 当前范围与后续
-
-- **M1 会陪 + M2 会干 + M3 会提醒·会梦**均已交付并真机验收通过：
-  - M1：登录/流式聊天/情绪机/桌宠拖动与位置恢复/快捷浮窗。
-  - M2：任务板 `TASK_EVENT` + worker/explore 子 Agent + 文件类工具 staging + 审批面板 + undo journal；`web_fetch` 走 gateway `/v1/proxy/fetch`（harness 网络出口唯一）；4 个 ready 技能。细节见 [docs/M2_TASK_BOARD.md](docs/M2_TASK_BOARD.md)。
-  - M3：30s tick 调度器（pomodoro/water/stand + Dream 补跑）+ p01/p02 心跳 + 勿扰/全屏静默守卫 + `REMINDER_SET/STOP` + 消费器文案池直出 + 夜间 Dream 三层压缩与索引重建 + 记忆管理页（分类/编辑/删除/清空，新增 `MEMORY_GET`）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移。见 [`packages/harness/src/scheduler/README.md`](packages/harness/src/scheduler/README.md)。
-- 三轮真机验收（M1/M2 于 2026-07-02、M3/UI 于 2026-07-03）全部修复清单见 [docs/HANDOFF.md](docs/HANDOFF.md)。
-- **面板窗弹层禁用 `window.prompt/confirm/alert`**（Tauri WKWebView 不支持，静默失败），统一走 `apps/shell/ui/panel/kit.tsx` 的 `useDialog()`。
-- M4 AudioProvider 未启用；生产邮件服务/Redis/Postgres/sidecar 打包签名/剩余美术资产未完成。
-- 规格未覆盖处的实现决策见 [SPEC-GAPS.md](SPEC-GAPS.md)（交付 review 后回填规格）。
-- GitHub 远程：[Innate-Labs/petsona](https://github.com/Innate-Labs/petsona)（2026-07-03 首推 46 commits；本地 git email 用 `<id>+<user>@users.noreply.github.com` 防泄漏，push 前用 `git filter-repo` 一次性重写全历史）。
+<p align="center"><sub>Made with 🐾 by <b>Innate Labs</b> · macOS-only · 2026</sub></p>
