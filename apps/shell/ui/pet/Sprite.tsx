@@ -62,12 +62,13 @@ function PoseMedia({ pose }: { pose: PoseName }) {
   )
 }
 
-export function Sprite({ emotion, wave }: { emotion: Emotion; wave?: boolean }) {
+/** action 传入时优先播该动作（单击轮换/拖拽 wave），否则跟随情绪姿势 */
+export function Sprite({ emotion, action }: { emotion: Emotion; action?: PoseName | null }) {
   const meta = EMOTION_META[emotion]
   return (
     <div className="sprite" title={`情绪：${meta.label}`}>
       <div className="sprite-shadow" />
-      <PoseMedia pose={wave ? 'wave' : meta.pose} />
+      <PoseMedia pose={action ?? meta.pose} />
       <span className="sprite-emotion">
         {meta.emoji} {meta.label}
       </span>

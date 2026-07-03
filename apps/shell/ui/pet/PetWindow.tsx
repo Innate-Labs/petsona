@@ -1,11 +1,11 @@
-// pet/PetWindow.tsx —— 悬浮宠物窗口：Sprite + Bubble + 整窗拖动 + 单击 wave / 双击开面板（§4 悬浮宠物窗口行）
+// pet/PetWindow.tsx —— 悬浮宠物窗口：Sprite + Bubble + 整窗拖动 + 动作交互（§4 悬浮宠物窗口行）
 //
-// 交互契约（第三轮真机验收后修订，替代前一版四选项菜单）：
-//   · 单击（无拖动）→ 播放 wave 动作视频 WAVE_MS，一次性回落 sit；不弹菜单，不上移。
-//   · 双击           → 打开主面板（走 open_panel('panel')）；同时不触发 wave 的开面板体验也自然。
-//   · 拖拽（>4px）   → 整窗随鼠标移动，同时触发 wave 让宠物「有反应」。
-// 契约文档 §4 原写「点击菜单」，第三轮改为「单击=动作、双击=开面板」——菜单会导致宠物 flex 上移
-// 只剩下半身，且无 macOS 右键补位手段；用单/双击更直接。
+// 交互契约（第五轮真机验收后修订）：
+//   · 单击（无拖动）→ 在 打哈欠/伸懒腰/舔爪子 三个动作间轮换播放，播完回落情绪姿势。
+//   · 双击           → 打开主面板。
+//   · 拖拽（>4px）   → 整窗随鼠标移动，播放 wave（点击拖拽动作素材只在拖动时出现）。
+//   · 右下角猫爪手柄 → 系统级窗口角拖拽缩放。
+// 另：待提醒（面板 Todo，localStorage 域）到点在此窗以气泡提示——轮询 30s，见 useTodoAlarm。
 
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
@@ -14,14 +14,55 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { IPC } from '@petsona/shared'
 import type { Emotion, PetBubblePayload, PetEmotionSignalPayload, PetPositionPayload } from '@petsona/shared'
 import { isTauri, on, send } from '../lib/ipc'
+import { loadTodos, saveTodos } from '../lib/local'
+import type { PoseName } from '../lib/character'
 import { EmotionMachine } from './EmotionMachine'
 import { Sprite } from './Sprite'
 import { Bubble } from './Bubble'
 
-// wave.mov 实测 4.017s（AVFoundation），取 4000ms 播完整一遍再回落
-const WAVE_MS = 4000
-// 双击窗口：>1x 的单击间隔就归为「继续挑逗」，触发多次 wave；<= 视为双击开面板
+// 单击轮换的动作池（第五轮：用户指定这三个；wave 留给拖拽专用）
+const CLICK_ACTIONS: PoseName[] = ['yawn', 'stretch', 'cheer']
+// 各动作视频实测时长（AVFoundation）：播完整一遍再回落，不足会截断动作
+const ACTION_MS: Partial<Record<PoseName, number>> = { yawn: 4800, stretch: 4650, cheer: 4800, wave: 4050 }
+// 双击窗口：间隔 <= 此值的两次单击视为双击开面板
 const DOUBLE_CLICK_MS = 260
+// 待提醒轮询：面板写 localStorage（同源共享），这里每 30s 扫一次到点未通知项
+const TODO_POLL_MS = 30_000
+// 到点 10 分钟内都算有效提醒（错过窗口不补发，防止启动时旧事项轰炸）
+const TODO_GRACE_MIN = 10
+
+/** 待提醒到点 → 宠物气泡。SPEC-GAP: todo 在 M1 是 localStorage/UI 域（无 harness 数据域），
+    气泡文案只能壳内拼接（缝②的 persona 出口管的是 harness 生成文本）；todo 迁 harness 后应改走文案池 */
+function useTodoAlarm(fire: (bubble: PetBubblePayload) => void) {
+  useEffect(() => {
+    const check = () => {
+      const now = new Date()
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      const today = now.toISOString().slice(0, 10)
+      const todos = loadTodos()
+      let changed = false
+      const due: string[] = []
+      for (const t of todos) {
+        if (t.done || t.notifiedOn === today) continue
+        const m = t.time.match(/^(\d{1,2}):(\d{2})$/)
+        if (!m) continue
+        const tMin = Number(m[1]) * 60 + Number(m[2])
+        if (nowMin - tMin >= 0 && nowMin - tMin <= TODO_GRACE_MIN) {
+          due.push(t.text)
+          t.notifiedOn = today
+          changed = true
+        }
+      }
+      if (changed) saveTodos(todos)
+      if (due.length > 0) fire({ kind: 'reminder', text: `叮～到点啦，别忘了：${due.join('、')}`, durationMs: 15_000 })
+    }
+    check()
+    const timer = setInterval(check, TODO_POLL_MS)
+    return () => clearInterval(timer)
+    // fire 由调用方保证稳定（setState），不进依赖免得反复重建定时器
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+}
 
 export function PetWindow() {
   // 为什么放 ref 不放 state：状态机实例要跨渲染存活，重建会丢驻留计时与切换额度
@@ -31,19 +72,22 @@ export function PetWindow() {
 
   const [emotion, setEmotion] = useState<Emotion>(machine.getState())
   const [bubble, setBubble] = useState<PetBubblePayload | null>(null)
-  const [waving, setWaving] = useState(false)
+  const [action, setAction] = useState<PoseName | null>(null)
   // 为什么记 press 起点：区分「拖动」与「点击」——startDragging 一旦触发，webview 收不到后续 click
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
-  const waveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clickPending = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clickIdx = useRef(0)
 
-  const triggerWave = () => {
-    setWaving(true)
-    if (waveTimer.current !== null) clearTimeout(waveTimer.current)
-    waveTimer.current = setTimeout(() => {
-      waveTimer.current = null
-      setWaving(false)
-    }, WAVE_MS)
+  useTodoAlarm(setBubble)
+
+  const triggerAction = (pose: PoseName) => {
+    setAction(pose)
+    if (actionTimer.current !== null) clearTimeout(actionTimer.current)
+    actionTimer.current = setTimeout(() => {
+      actionTimer.current = null
+      setAction(null)
+    }, ACTION_MS[pose] ?? 4000)
   }
 
   useEffect(() => {
@@ -58,7 +102,7 @@ export function PetWindow() {
     ]
     return () => {
       unsubs.forEach((u) => u())
-      if (waveTimer.current !== null) clearTimeout(waveTimer.current)
+      if (actionTimer.current !== null) clearTimeout(actionTimer.current)
       if (clickPending.current !== null) clearTimeout(clickPending.current)
     }
   }, [machine])
@@ -75,7 +119,7 @@ export function PetWindow() {
     // 折中为位移 >4px 才开始整窗拖动，点按手感不变，拖动无感知差异。
     if (Math.abs(e.screenX - p.x) + Math.abs(e.screenY - p.y) > 4) {
       p.dragging = true
-      triggerWave() // 拖动本身也是「被挑逗」，接 wave 让宠物有反应（修①）
+      triggerAction('wave') // 「点击拖拽动作」素材只在拖动时出现（第五轮契约）
       if (isTauri()) void getCurrentWindow().startDragging()
     }
   }
@@ -94,7 +138,10 @@ export function PetWindow() {
     if (clickPending.current !== null) clearTimeout(clickPending.current)
     clickPending.current = setTimeout(() => {
       clickPending.current = null
-      triggerWave()
+      // 三个动作轮着来：每次单击换下一个，比固定一个有生气
+      const pose = CLICK_ACTIONS[clickIdx.current % CLICK_ACTIONS.length]!
+      clickIdx.current += 1
+      triggerAction(pose)
     }, DOUBLE_CLICK_MS)
   }
 
@@ -118,10 +165,12 @@ export function PetWindow() {
     <div className="pet-window" onMouseDown={onMouseDown} onMouseMove={onMouseMove}>
       {bubble && <Bubble bubble={bubble} onDismiss={() => setBubble(null)} />}
       <div className="sprite-hit" onClick={onSpriteClick} onDoubleClick={onSpriteDoubleClick}>
-        {/* wave 期间切「举手打招呼」动作视频；WAVE_MS 后回落 sit（EMOTION_META.pose） */}
-        <Sprite emotion={emotion} wave={waving} />
+        {/* action 期间播对应动作视频；ACTION_MS 后回落情绪姿势（EMOTION_META.pose） */}
+        <Sprite emotion={emotion} action={action} />
       </div>
-      <div className="pet-resize" title="拖拽调整大小" onMouseDown={onResizeGrip} />
+      <div className="pet-resize" title="拖拽调整大小" onMouseDown={onResizeGrip}>
+        🐾
+      </div>
     </div>
   )
 }

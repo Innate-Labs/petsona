@@ -156,24 +156,30 @@ select:focus {
   height: var(--pet-size);
 }
 
-/* 缩放手柄：窗口边缘全透明摸不准，右下角给一个悬停可见的抓手（三道斜纹，系统缩放手柄惯例） */
+/* 缩放手柄：窗口边缘全透明摸不准，右下角给一个悬停可见的猫爪 🐾（第六轮：斜纹改爪印） */
 .pet-resize {
   position: fixed;
   right: 4px;
   bottom: 4px;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
   cursor: nwse-resize;
   opacity: 0;
-  transition: opacity 120ms;
-  background:
-    linear-gradient(135deg, transparent 0 6px, rgba(89, 50, 0, 0.55) 6px 8px, transparent 8px 10px,
-      rgba(89, 50, 0, 0.55) 10px 12px, transparent 12px 14px, rgba(89, 50, 0, 0.55) 14px 16px, transparent 16px);
-  border-radius: 4px;
+  transition: opacity 120ms, transform 120ms;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .pet-window:hover .pet-resize {
   opacity: 1;
+}
+
+.pet-resize:hover {
+  transform: scale(1.25);
 }
 
 .sprite-img {

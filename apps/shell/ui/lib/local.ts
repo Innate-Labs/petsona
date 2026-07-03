@@ -17,7 +17,8 @@ export type PetProfile = {
   since: string
 }
 
-export type TodoItem = { id: string; text: string; time: string; done: boolean; repeat?: boolean }
+// notifiedOn：宠物窗气泡已提醒的日期（YYYY-MM-DD），同一天不重复轰炸；跨天后可再提醒
+export type TodoItem = { id: string; text: string; time: string; done: boolean; repeat?: boolean; notifiedOn?: string }
 
 const K_PROFILE = 'petsona.profile'
 const K_TODOS = 'petsona.todos'

@@ -166,11 +166,20 @@ export function Reminders() {
   }
 
   const addTodo = () => {
-    void dialog.prompt({ title: '要记点什么？', placeholder: '待办内容' }).then((text) => {
-      if (!text?.trim()) return
-      const time = new Date().toTimeString().slice(0, 5)
-      mutateTodos([...todos, { id: `${Date.now()}`, text: text.trim(), time, done: false }])
-    })
+    void dialog
+      .prompt({ title: '要记点什么？', placeholder: '待提醒内容' })
+      .then((text) => {
+        if (!text?.trim()) return
+        // 到点由宠物窗气泡提醒（PetWindow useTodoAlarm 轮询 localStorage），默认提一小时后
+        const defaultTime = new Date(Date.now() + 3600_000).toTimeString().slice(0, 5)
+        return dialog
+          .prompt({ title: '什么时候提醒你？', inputType: 'time', defaultValue: defaultTime })
+          .then((time) => {
+            if (!time) return
+            mutateTodos([...todos, { id: `${Date.now()}`, text: text.trim(), time, done: false }])
+          })
+      })
+      .catch(() => {})
   }
 
   return (
