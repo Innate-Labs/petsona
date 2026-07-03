@@ -31,7 +31,7 @@
 | H13 | staging/store.ts | undo journal 保留/归档后台未定义 | 按 `UNDO_RETENTION_DAYS=7` 类型常量写 journal，不做自动清理 | 规格 §3.4 补归档触发与失败处理 |
 | H14 | shared/ipc.ts AUTH_STATE_GET | §3 消息表无登录态拉取 req；仅广播在真机有「广播早于面板订阅」竞态 | 新增 `AUTH_STATE_GET` req 返回当前 authState，面板挂载时拉取兜底 | 规格 §3.1 消息表收录 |
 | H15 | routes/proxy.ts | 单测需在环回地址自起 http 服务验证真实抓取，与 SSRF 拦截冲突 | 环境变量 `PETSONA_PROXY_ALLOW_LOOPBACK=1` 测试专用逃生口 | 规格 §8 测试口径收录或改用可配置 allowlist |
-| H16 | skills/screen_qa | 本地 OCR 命令行封装未定义（macOS Vision 无官方 CLI） | SKILL.md 允许退化：截图落任务目录+findings 说明无法 OCR | M3 前交付 OCR 封装（Vision framework 或 shortcuts） |
+| H16 | skills/screen_qa | 本地 OCR 命令行封装未定义（macOS Vision 无官方 CLI） | ✅ 已交付 `ocr` 重工具：`$DATA/bin/ocr.swift`（Vision，zh/en）经 `xcrun swift` JIT 执行，输出 `<data>` 包裹；SKILL.md 退化路径保留兜底 | 规格 §3.6 工具清单收录 ocr |
 | H17 | lib.rs open_panel | 面板深链 hash 规则规格未写 | 统一 `#/panel[/<page>]`，open_panel 负责补前缀；首建窗口 URL 也带子页 | 规格 §4 面板路由表收录 |
 | H18 | scheduler/cron.ts | 5 段 cron 表达不了任意分钟间隔（喝水 60/站立 45） | water/stand/pomodoro 走 lastFiredAt+间隔判定；water/stand 间隔实时读 config，pomodoro 会话内取 payload | 规格 §3.8 补 CronJob 间隔类任务口径 |
 | H19 | scheduler/cron.ts | 番茄钟重启恢复未定义 | durable=false：重启丢会话（中断的专注段无意义），water/stand/dream durable | 规格 §3.8 收录 |

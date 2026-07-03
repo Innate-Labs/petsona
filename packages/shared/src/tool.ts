@@ -34,7 +34,7 @@ export const LIGHT_TOOLS = [
 // 重工具名单（loop=subagent，M2 实现；M1 仅作 registry 校验黑名单）
 export const HEAVY_TOOLS = [
   'fs_read', 'fs_glob', 'fs_write', 'fs_move', 'fs_rename', 'fs_trash',
-  'shell', 'applescript', 'screenshot', 'web_fetch', 'todo_write', 'report_progress',
+  'shell', 'applescript', 'screenshot', 'ocr', 'web_fetch', 'todo_write', 'report_progress',
 ] as const
 
 export type LightToolName = (typeof LIGHT_TOOLS)[number]

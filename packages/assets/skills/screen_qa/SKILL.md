@@ -14,12 +14,10 @@ owner: 机动 2 · AI/Prompt
 ## 流程
 
 1. `screenshot` 截屏（落在任务输出目录，不上传原图）。
-2. `shell` 只读 OCR：优先
-   `shortcuts run` 不可用时用 `osascript`/`sips` 均不合适——用内置
-   `screencapture` 已完成截图后，OCR 走 `shell` 执行
-   `osascript -e 'use framework "Vision"' …` 过重时，退化为：
-   直接把截图路径与「无法 OCR」记入 findings，请求主循环转人工描述。
-   （SPEC-GAP: 本地 OCR 依赖 macOS Vision，命令行封装 M2 后补；当前允许退化路径）
+2. `ocr` 工具识别截图文字：输入上一步返回的 path，得到 `<data>` 包裹的画面文本
+   （本地 macOS Vision，中英双语，图片与文本都不出网）。
+   工具报错（无 swift 运行时 / 脚本缺失 / 超时）时退化：
+   把截图路径与「无法 OCR」记入 findings，请求主循环转人工描述，不重试。
 3. 拿到文本后，只围绕 goal 回答：定位相关片段 → 给结论/解释/下一步建议。
 4. `report_progress` 汇报「已截屏，OCR 文本 N 字」。
 

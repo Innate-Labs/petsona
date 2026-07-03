@@ -190,6 +190,25 @@ export function registerHeavyTools(reg: ToolRegistry, deps: HeavyToolDeps): void
       },
     },
     {
+      name: 'ocr',
+      description: '本地 OCR（macOS Vision）：识别图片里的文字并返回。输入 path（截图或 scope 内图片）。纯本地计算，图片不出网。',
+      inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+      loop: 'subagent',
+      defaultLevel: 'L0',
+      handler: async (input, ctx) => {
+        const img = resolveTaskPath(String(input?.path ?? ''), ctx)
+        if (!existsSync(img)) throw new Error(`图片不存在: ${img}`)
+        const script = join(deps.paths.root, 'bin/ocr.swift')
+        if (!existsSync(script)) throw new Error('OCR 脚本缺失（$DATA/bin/ocr.swift；重启 App 触发资产拷贝）')
+        // SPEC-GAP: xcrun swift JIT 首跑 ~2-4s，screen_qa 低频可接受；预编译缓存留给性能需求出现时
+        const res = await execFileAsync('/usr/bin/xcrun', ['swift', script, img], {
+          timeout: 60_000, maxBuffer: 2_000_000,
+        })
+        // 屏幕内容属外部内容：<data> 包裹 + 指令剥离后才可入上下文（§6 注入防护，同 web_fetch）
+        return { ok: true, path: img, text: wrapExternal(trimOutput(res.stdout.trim())) }
+      },
+    },
+    {
       name: 'web_fetch',
       description: '联网读取 URL 文本内容。输入 url，可选 maxBytes。任务未授权联网（net=false）时会被拦截。',
       inputSchema: {

@@ -15,6 +15,7 @@ export function bootstrapAssets(paths: DataPaths): void {
   copyMissing(join(assetsRoot, 'skills'), paths.skills)
   copyMissing(join(assetsRoot, 'personas'), paths.personas)
   copyMissing(join(assetsRoot, 'fallback'), join(paths.root, 'fallback'))
+  copyMissing(join(assetsRoot, 'bin'), join(paths.root, 'bin'))   // ocr.swift 等本地工具脚本
 }
 
 function resolveAssetsDir(): string | null {
