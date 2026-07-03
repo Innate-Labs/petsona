@@ -30,6 +30,11 @@ import { registerLightTools } from './tools/light/index.js'
 import { registerHeavyTools } from './tools/heavy/index.js'
 import { InjectionQueue } from './loop/injection_queue.js'
 import { CompanionLoop } from './loop/companion.js'
+import { ReminderConsumer } from './loop/reminder_consumer.js'
+import { CronScheduler } from './scheduler/cron.js'
+import { Heartbeat } from './scheduler/heartbeat.js'
+import { decideProactive, isSimilarToRecent } from './persona/proactive.js'
+import { buildSegments } from './persona/assemble.js'
 import { Tracker } from './telemetry/track.js'
 import { TaskBoard, TaskBoardError } from './tasks/board.js'
 import { makeSubagentExecutor, validateTaskResult } from './tasks/subagent.js'
@@ -151,6 +156,43 @@ export function createHarness(emitLine: (line: string) => void) {
     getEmotion: () => emotion,
   })
 
+  // ---- M3 调度与主动性（§3.8）：调度器纯生产，消费与 LLM 决策都在外面接线 ----
+  const idleNow = { fullscreen: false }
+  const scheduler = new CronScheduler({
+    jobsPath: paths.scheduled,
+    queue,
+    getConfig: () => config.get(),
+    onDream: async () => {
+      const report = await store.dream()
+      console.error('[scheduler] dream 报告:', JSON.stringify(report))
+    },
+  })
+  const consumer = new ReminderConsumer({
+    queue, pool,
+    getConfig: () => config.get(),
+    getFullscreen: () => idleNow.fullscreen,
+    isLoopBusy: () => loop.isBusy,
+    emit,
+    track: (id, props) => tracker.track(id, props),
+  })
+  const heartbeat = new Heartbeat({
+    getConfig: () => config.get(),
+    decide: (input) => decideProactive(gateway, {
+      ...input,
+      personaCore: buildSegments(paths, emotion).personaCore,
+    }),
+    isDuplicate: (text, recent) => isSimilarToRecent(gateway, text, recent),
+    emitProactive: (text) => {
+      // 主动气泡落 hot 轮次：下一轮对话模型知道自己刚主动说过什么（SPEC-GAP: 规格未写，取上下文连续性默认）
+      db.insertTurn('pet', text, Date.now())
+      emit({ type: IPC.PET_BUBBLE, payload: { text, durationMs: 8000, kind: 'proactive' } })
+      tracker.track(TRACK.主动气泡_展示, { chars: text.length })
+    },
+    statePath: paths.proactive,
+  })
+  scheduler.start()
+  consumer.start()
+
   // ---- 路由：§3.1 全消息表 ----
   const router = new Router((env) => emitLine(encodeLine(env)))
 
@@ -232,9 +274,21 @@ export function createHarness(emitLine: (line: string) => void) {
     }
   })
 
-  // 提醒类（调度器 M3；SET 走轻工具同款持久化占位）
-  router.placeholder(IPC.REMINDER_SET, 'M3')
-  router.placeholder(IPC.REMINDER_STOP, 'M3')
+  // 提醒类（M3 调度器）
+  const REMINDER_KINDS = ['pomodoro', 'water', 'stand'] as const
+  router.onReq(IPC.REMINDER_SET, async (p: { kind?: string; config?: object }) => {
+    const kind = REMINDER_KINDS.find((k) => k === p?.kind)
+    if (!kind) throw new IpcError('BAD_REQUEST', `kind 必须是 ${REMINDER_KINDS.join('/')}`)
+    scheduler.setReminder(kind, p?.config)
+    tracker.track(TRACK.提醒_设置, { kind })
+    return { ok: true, kind }
+  })
+  router.onReq(IPC.REMINDER_STOP, async (p: { kind?: string }) => {
+    const kind = REMINDER_KINDS.find((k) => k === p?.kind)
+    if (!kind) throw new IpcError('BAD_REQUEST', `kind 必须是 ${REMINDER_KINDS.join('/')}`)
+    scheduler.stopReminder(kind)
+    return { ok: true, kind }
+  })
 
   // 记忆类
   router.onReq(IPC.MEMORY_LIST_GET, async (p: { type?: any }) => ({ items: cold.metas(p?.type) }))
@@ -297,8 +351,11 @@ export function createHarness(emitLine: (line: string) => void) {
   router.onEvent(IPC.SYS_PERMISSION_STATE, (p: typeof sysState) => {
     Object.assign(sysState, p ?? {})
   })
-  router.onEvent(IPC.SYS_IDLE_STATE, () => {
-    // p01 心跳输入——M3 交付心跳判定；M1 只接收不动作（Gate ④ 链路通）
+  router.onEvent(IPC.SYS_IDLE_STATE, (p: { idleMinutes?: number; fullscreen?: boolean }) => {
+    const payload = { idleMinutes: p?.idleMinutes ?? 0, fullscreen: !!p?.fullscreen }
+    if (payload.fullscreen !== idleNow.fullscreen) console.error(`[idle] fullscreen=${payload.fullscreen}`)
+    idleNow.fullscreen = payload.fullscreen
+    void heartbeat.onIdle(payload)
   })
   router.onEvent(IPC.PET_EMOTION_SIGNAL, (p: { state: Emotion; cause: string }) => {
     if (p?.state) { emotion = p.state; emotionCause = p.cause ?? '' }
@@ -323,9 +380,9 @@ export function createHarness(emitLine: (line: string) => void) {
       if (!env) { console.error('[ipc] 非法行，drop'); return }
       await router.dispatch(env)
     },
-    shutdown: () => { tracker.stop(); db.close() },
+    shutdown: () => { scheduler.stop(); consumer.stop(); tracker.stop(); db.close() },
     // 测试钩子
-    _internals: { hooks, registry, subagentRegistry, staging, queue, pool, store, config, get emotion() { return emotion } },
+    _internals: { hooks, registry, subagentRegistry, staging, queue, pool, store, config, scheduler, heartbeat, consumer, get emotion() { return emotion } },
   }
 }
 

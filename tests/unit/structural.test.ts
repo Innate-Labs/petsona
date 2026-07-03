@@ -128,3 +128,17 @@ describe('缝④：token 禁落磁盘', () => {
     expect(offenders).toEqual([])
   })
 })
+
+describe('缝（M3 §3.8）：调度器不直接调 LLM', () => {
+  it('scheduler/ 不 import gateway', () => {
+    const files = walk(join(ROOT, 'packages/harness/src/scheduler'))
+    expect(files.length).toBeGreaterThan(0)
+    const offenders: string[] = []
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8')
+      const lines = src.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      if (lines.some((l) => /gateway\/client|from ['"]\.\.\/gateway/.test(l))) offenders.push(relative(ROOT, f))
+    }
+    expect(offenders).toEqual([])
+  })
+})
