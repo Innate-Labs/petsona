@@ -25,3 +25,5 @@ export const SCHEDULER_TICK_MS = 30_000       // 调度线程每 30s 检查 sche
 export const INJECTION_MAX_PER_TURN = 3       // 单轮最多注入 3 条
 export const DREAM_CRON = '30 3 * * *'        // 每日 03:30
 export const DREAM_CATCHUP_HOURS = 20         // 错过 >20h 才补跑，防重复
+// SPEC-GAP: 规格未定义提醒条目滞留上限；全屏/勿扰压住 10 分钟后直接过期丢弃，避免堆积轰炸
+export const REMINDER_EXPIRES_MS = 10 * 60_000
