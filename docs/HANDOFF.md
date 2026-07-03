@@ -28,15 +28,18 @@
 7. `core:default` 不含 `allow-start-dragging` → 桌宠/浮窗任何人都拖不动；已显式加权限，浮窗头部补 `data-tauri-drag-region`。
 8. `open_panel` 深链少 `#/panel/` 前缀 → 浮窗「历史」与桌宠菜单子页全部落回首页；现统一补前缀，窗口首建也带子页。
 
-## 三轮真机验收修复（2026-07-03，UI 与 M3）
+## UI 真机验收修复（三~七轮，2026-07-03，以下为最终定型状态）
 
-首先是「宠物透明底」问题——原始 VP9-alpha webm 在 WKWebView 必黑底，改用 ffmpeg 转 HEVC-alpha .mov 接入五姿势（sit/wave/yawn/stretch/cheer），Sprite onError 自动降级图集兜底。随后 UI 侧一次性解决 5 个问题：
+宠物透明底先解决：原始 VP9-alpha webm 在 WKWebView 必黑底，改用 ffmpeg 转 HEVC-alpha .mov 接入五姿势（sit/wave/yawn/stretch/cheer），Sprite onError 自动降级图集兜底。随后经三~七轮迭代把交互与面板定型（逐轮过程见 git log `fix(shell): 第N轮`）：
 
-1. **面板窗 `window.prompt/confirm/alert` 失灵**（免打扰、Todo 新增、记忆编辑/删除/清空、宠物改名、字段编辑、形象上传提示全部点了没反应）—— Tauri（macOS WKWebView）默认不实现这三个 API。`ui/panel/kit.tsx` 新增 `<ModalHost>` + `useDialog()` 三方法（prompt/confirm/alert，语义贴齐浏览器：ESC + 遮罩点击取消、Enter 提交、autoFocus）。Panel.tsx 三分支统一挂载。**硬约束**：面板窗任何按钮的交互都必须走 `useDialog()`，不得再直接调 window.\*。
-2. **桌宠单击弹菜单去掉**：原「点击 → 四选项菜单」会让宠物 flex 上移只剩下半身，且菜单本身不方便。改为「单击 → 播放 wave 动作视频 3.5s → 回落 sit；双击 → 直接打开主面板」。`PetWindow.tsx` 用 `setTimeout(DOUBLE_CLICK_MS=260)` 让单双击互斥、`WAVE_MS=3500` 控制回落。
-3. **拖拽桌宠触发 wave**：`onMouseMove` 里位移 >4px 判定拖拽的同时调 `triggerWave()`。
-4. **主面板贴内容**：`panel.css` 的 `.panel-shell` 撤 max-width 撑满窗口（`@media(min-width:600px)` 仅浏览器原型走手机比例居中），`src-tauri/src/lib.rs` 面板窗从 920×640 缩到 440×560，宽度贴内容、高度装下 hero+2×2 卡+新增输入框+页头页脚。
-5. **主页快捷输入框**：`Home.tsx` 底部加 `.home-quick`，Enter 提交 → `sessionStorage` 存 seed → `nav('chat')` 跳转 → `Chat.tsx` 挂载读 seed 并 sendText。seed 一次性消费（`ui/lib/chatSeed.ts` 的 `popChatSeed`），React 18 严格模式重挂载用 ref 防重发。
+1. **面板窗弹层**：Tauri（macOS WKWebView）默认不实现 `window.prompt/confirm/alert`（静默返回 = 按钮点了没反应）。`ui/panel/kit.tsx` 新增 `<ModalHost>` + `useDialog()`（prompt/confirm/alert，ESC + 遮罩取消、Enter 提交、autoFocus；prompt 支持 options 下拉 / inputType date·number·time / suggestions datalist）。Panel.tsx 三分支统一挂载。**硬约束**：面板窗任何弹层都走 `useDialog()`，不得直接调 window.\*。
+2. **桌宠交互最终契约**（`ui/pet/PetWindow.tsx`）：单击 → 在 `yawn/stretch/cheer` 三动作间轮换播放；双击 → 打开主面板；拖拽（位移 >4px）→ 整窗跟手并播 `wave`（拖拽专属，别处不放）；右下角悬停出 🐾 手柄 → `startResizeDragging` 系统级窗口角缩放。**动作播放期锁定**：`actionTimer` 存活时点击/拖拽都不换动作，播完回落情绪姿势。待提醒到点也在此窗弹气泡（见下条提醒页）。
+3. **宠物动作视频防空窗定案**（`ui/pet/Sprite.tsx`，踩了四轮的坑，改前必读文件头注释）：全部姿势视频**常驻挂载、元素终身不重建**（重建即重加载即空窗，WKWebView 铁律），但**只有 active 一路解码播放，其余 pause 并停在第 0 帧**。历史雷区：a) key 换源重挂载 → 必空窗；b) 双缓冲垫底元素换 key → 照样重挂载；c)「起播超时判坏源」看门狗 → 冷启动首载被误伤、永久回退旧草稿图集；d) 全员同播 → 5 路 HEVC-alpha 双层解码卡顿 + 隐藏层循环到中段被切出来闪帧重放。
+4. **桌宠窗可缩放**（`src-tauri/src/pet_window.rs`）：`to_panel` 会整体覆盖 style mask，`NONACTIVATING_PANEL | RESIZABLE` 必须一起设；min 120×140 / max 640×700；`pet-window.json` 增存 `w/h`（serde default 兼容旧文件），Moved/Resized 双事件全量落盘；CSS `.pet-window .sprite` 随窗缩放。
+5. **主面板贴桌面窗口**：`panel.css` `.panel-shell` 撑满，限宽 420 只在浏览器原型（`body[data-host=web]`，main.tsx 打标）生效——断点方案会在窗口最大化时误伤留白；`lib.rs` `PANEL_WIDTH=440 PANEL_HEIGHT=640` + `min_inner_size` 同值锁死（主页内容实高 ≈607，560 必出滚动条）；去掉页内右上角 X（macOS 红绿灯已有关闭）。
+6. **主页快捷输入框**：`Home.tsx` 底部 `.home-quick`，Enter → `sessionStorage` 存 seed → `nav('chat')` → `Chat.tsx` 挂载读 seed 并 sendText（`ui/lib/chatSeed.ts` 的 `popChatSeed` 一次性消费，ref 防严格模式重挂载重发）。
+7. **提醒页**：三张卡的时长点击可调（弹时长选项写回 `config.reminders`，water/stand 调度器实时读即时生效、pomodoro 进行中自动 STOP+SET 重启会话）；免打扰时段改开始/结束两个下拉（半小时粒度，不再手写）；「Todo」改名「待提醒」，到点由宠物窗气泡提示（`PetWindow` 每 30s 轮询 localStorage todos，`TodoItem.notifiedOn` 同日去重、10 分钟宽限、错过不补发）。
+8. **宠物数据页全字段可编辑**（`ui/panel/PetData.tsx`）：种类/性格行内原生下拉；品种按种类给 datalist 建议且可自填；年龄常用建议可自填；体重数字输入；驱虫/疫苗原生日期选择器；所有行单击即编辑。
 
 ## 真机 Smoke Check
 
@@ -44,7 +47,7 @@
 2. debug bundle：`cd apps/shell && pnpm tauri build --debug --bundles app`（MCP/自动化验收需要 bundle 注册 LaunchServices）
 3. `PETSONA_HARNESS_CMD="node <repo>/packages/harness/dist/main.js" ./apps/shell/src-tauri/target/debug/bundle/macos/Petsona.app/Contents/MacOS/petsona-shell`
 4. 任意邮箱登录，开发验证码 `888888`。
-5. 桌宠：单击 → 播 wave 动作、双击 → 开主面板、拖拽 → 触发 wave 且整窗跟手。
+5. 桌宠：单击 → 在 yawn/stretch/cheer 三动作间轮换（播放期不被打断）、双击 → 开主面板、拖拽 → 播 wave 且整窗跟手、悬停右下角 🐾 手柄 → 拖拽缩放（重启后尺寸/位置恢复）。
 6. 面板：Enter 输入框跳转对话页并发送；提醒页免打扰设置弹自绘对话框；记忆页编辑/删除/清空弹自绘对话框。
 7. 提醒：番茄钟开启 → 25min 后 REMINDER_FIRED 走宠物气泡；勿扰时段内被押回。
 8. worker 审批闭环（mock LLM）：

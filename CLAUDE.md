@@ -32,6 +32,7 @@ macOS 桌宠 Agent（Tauri 壳 + Node Harness + 云网关）。运行/测试/接
 - 协议类型唯一真源 `packages/shared`，壳/harness/网关只 import **不复制**。
 - 埋点/兜底/权限是横切逻辑，走 hooks 管线（`hooks/pipeline.ts` 注册），**禁止**在技能或业务内重复实现。
 - **面板窗弹层**禁用 `window.prompt/confirm/alert`（Tauri WKWebView 静默返回 = 按钮点了没反应，第三轮踩过一次）；所有面板窗对话框走 `apps/shell/ui/panel/kit.tsx` 的 `useDialog()`（prompt/confirm/alert）。
+- **宠物动作视频**（`apps/shell/ui/pet/Sprite.tsx`）常驻挂载、元素不重建、只 active 一路播放其余停第 0 帧；禁 key 换源 / 起播看门狗（WKWebView 上会空窗或误回退旧图集，踩四轮）——改前先读文件头注释。
 
 ## 开发标准
 
@@ -57,4 +58,4 @@ harness 其他 env：`PETSONA_HARNESS_CMD`（壳 spawn sidecar 的覆盖命令�
 
 ## 里程碑状态（写代码前必知）
 
-M1/M2/M3 核心均已交付并真机验收通过（2026-07-02 M1/M2 首轮 + 2026-07-03 M3 与 UI 三轮）。M3 落地：30s tick 调度器 + p01/p02 心跳 + `REMINDER_SET/STOP` + 消费器文案池直出 + 勿扰/全屏静默守卫 + 夜间 Dream 三层压缩 + 记忆管理页（`MEMORY_GET` 新协议）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移 + 宠物美术五姿势 HEVC-alpha .mov。M4 AudioProvider 未开工。三轮验收修复清单与当前入口见 docs/HANDOFF.md。
+M1/M2/M3 核心均已交付并真机验收通过（2026-07-02 M1/M2 首轮 + 2026-07-03 M3 与 UI 三~七轮）。M3 落地：30s tick 调度器 + p01/p02 心跳 + `REMINDER_SET/STOP` + 消费器文案池直出 + 勿扰/全屏静默守卫 + 夜间 Dream 三层压缩 + 记忆管理页（`MEMORY_GET` 新协议）+ 全屏检测真实现（`macos/idle.rs` CGWindowList）+ `ocr` 重工具（macOS Vision）+ 匿名→登录本地目录迁移 + 宠物美术五姿势 HEVC-alpha .mov。UI 侧经三~七轮定型桌宠交互（单击三动作轮换/双击开面板/拖拽 wave/🐾 缩放）、面板贴桌面窗口、待提醒到点气泡、提醒时长可调。M4 AudioProvider 未开工。验收修复清单与当前入口见 docs/HANDOFF.md。
