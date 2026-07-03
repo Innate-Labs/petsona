@@ -100,4 +100,4 @@ tasks/ / staging/ / plans/ / undo/ / scheduled.json / outputs/ / logs/audit.json
 - **面板窗弹层禁用 `window.prompt/confirm/alert`**（Tauri WKWebView 不支持，静默失败），统一走 `apps/shell/ui/panel/kit.tsx` 的 `useDialog()`。
 - M4 AudioProvider 未启用；生产邮件服务/Redis/Postgres/sidecar 打包签名/剩余美术资产未完成。
 - 规格未覆盖处的实现决策见 [SPEC-GAPS.md](SPEC-GAPS.md)（交付 review 后回填规格）。
-- GitHub 远程：**尚未推送**——本地 main 分支已按模块 conventional commits，等仓库地址就绪后 `git remote add origin <url> && git push -u origin main`。
+- GitHub 远程：[Innate-Labs/petsona](https://github.com/Innate-Labs/petsona)（2026-07-03 首推 46 commits；本地 git email 用 `<id>+<user>@users.noreply.github.com` 防泄漏，push 前用 `git filter-repo` 一次性重写全历史）。
