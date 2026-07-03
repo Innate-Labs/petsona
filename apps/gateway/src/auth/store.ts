@@ -8,7 +8,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { env } from '../env.js'
 
-export type User = { id: string; email: string; deviceId?: string; banned: boolean; createdAt: number }
+// passwordHash：scrypt 输出（salt.hex.hash.hex），首次密码登录时写入；code 路径老用户可为空
+export type User = { id: string; email: string; deviceId?: string; banned: boolean; createdAt: number; passwordHash?: string }
 type CodeRow = { code: string; expiresAt: number; attempts: number }
 type RefreshRow = { userId: string; expiresAt: number; revokedAt?: number }
 
@@ -66,6 +67,15 @@ export function findUserById(id: string): User | undefined {
 
 export function isNewUser(email: string): boolean {
   return !users.has(email)
+}
+
+/** 首次密码登录：给已存在 user 补 hash；不覆盖已有 hash（改密走另一路径，规格未定不实现） */
+export function setUserPassword(email: string, hash: string): void {
+  const u = users.get(email)
+  if (!u) return
+  if (u.passwordHash) return
+  u.passwordHash = hash
+  persist()
 }
 
 // —— refresh 白名单（滚动刷新：旧 jti 立即 revoke）——

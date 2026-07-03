@@ -7,8 +7,9 @@ import { checkAndCountAuthCode } from '../governance.js'
 import { requireUser, signAccess, signRefresh, verifyRefresh } from '../auth/jwt.js'
 import {
   findUserByEmail, findUserById, isNewUser, isRefreshValid, issueCode,
-  loadStore, revokeRefresh, saveRefresh, upsertUser, verifyCode,
+  loadStore, revokeRefresh, saveRefresh, setUserPassword, upsertUser, verifyCode,
 } from '../auth/store.js'
+import { hashPassword, verifyPassword } from '../auth/password.js'
 
 // v2.1 §3.3 邮箱格式校验（SPEC-GAP: 规格未给正则，取宽松 RFC 近似）
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -45,23 +46,42 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     return reply.send({ ok: true, ttl })
   })
 
-  // —— POST /v1/auth/login：验证码换 JWT ——
+  // —— POST /v1/auth/login：验证码 OR 密码换 JWT ——
+  // 双路径向后兼容：
+  //   {email, code}：老 v2.1 验证码流程（tests + 老客户端仍走此路）
+  //   {email, password}：桌面单步「首次填即注册；已注册核对 hash」（当前 UI 走此路）
+  // 为什么不给密码单独开路由：一个入口即完整登录，减少客户端条件分支。
   app.post('/v1/auth/login', async (req, reply) => {
-    const { email, code, deviceId } = (req.body ?? {}) as { email?: string; code?: string; deviceId?: string }
-    if (!email || !EMAIL_RE.test(email) || !code) {
-      return reply.code(400).send(errBody('BAD_REQUEST', '缺少邮箱或验证码'))
+    const { email, code, password, deviceId } = (req.body ?? {}) as {
+      email?: string; code?: string; password?: string; deviceId?: string
+    }
+    if (!email || !EMAIL_RE.test(email) || (!code && !password)) {
+      return reply.code(400).send(errBody('BAD_REQUEST', '缺少邮箱或凭证'))
     }
     const existing = findUserByEmail(email)
     if (existing?.banned) {
       return reply.code(403).send(errBody('USER_BANNED', '账号已被封禁'))
     }
-    if (!verifyCode(email, code)) {
+
+    if (password) {
+      // 密码路径：已存在 user 且有 hash → 核对；否则视为首次「登录即注册/认领」写 hash
+      if (existing?.passwordHash && !verifyPassword(password, existing.passwordHash)) {
+        return reply.code(401).send(errBody('INVALID_CREDENTIALS', '邮箱或密码不对'))
+      }
+      const firstTime = isNewUser(email)
+      const user = upsertUser(email, deviceId)
+      if (!user.passwordHash) setUserPassword(email, hashPassword(password))
+      if (firstTime) console.log(`[gateway] 新用户注册 ${user.id}（密码路径）`)
+      return reply.send({ ...issueTokenPair(user.id, user.email), user: { id: user.id, email: user.email } })
+    }
+
+    // 验证码路径（v2.1 §3.3.4 原样保留）
+    if (!verifyCode(email, code!)) {
       return reply.code(401).send(errBody('INVALID_CODE', '验证码错误或已过期'))
     }
     const firstTime = isNewUser(email)
-    // 匿名→登录迁移（v2.1 §3.3.4）：deviceId 关联进 user，匿名期记忆归户
     const user = upsertUser(email, deviceId)
-    if (firstTime) console.log(`[gateway] 新用户注册 ${user.id}（埋点 1003 由客户端上报）`)
+    if (firstTime) console.log(`[gateway] 新用户注册 ${user.id}（验证码路径）`)
     return reply.send({ ...issueTokenPair(user.id, user.email), user: { id: user.id, email: user.email } })
   })
 

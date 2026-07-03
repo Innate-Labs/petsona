@@ -1,6 +1,10 @@
 // 云网关入口（v3.0 §2.2 apps/gateway；Fastify + TS + ESM）
 // buildServer 与 listen 分离：测试用 fastify inject，不占端口。
 
+// 必须先 load .env：env.ts 惰性读 process.env，但工厂缓存 key 在首个请求时就冻结，
+// 若 .env 晚于业务 import 加载，缓存里落的是缺省 mock，直到重启不切换。
+import './load-env.js'
+
 import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import { pathToFileURL } from 'node:url'

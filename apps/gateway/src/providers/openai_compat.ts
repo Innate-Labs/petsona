@@ -56,7 +56,10 @@ export class OpenAICompatProvider implements LLMProvider {
   private async onceChat(req: ProviderChatRequest): Promise<LlmChatResponse> {
     const res = await this.post(req, false)
     const json = (await res.json().catch(() => null)) as {
-      choices?: { message?: { content?: string | null; tool_calls?: OaiToolCall[] }; finish_reason?: string }[]
+      choices?: {
+        message?: { content?: string | null; reasoning_content?: string | null; tool_calls?: OaiToolCall[] }
+        finish_reason?: string
+      }[]
       usage?: { prompt_tokens?: number; completion_tokens?: number }
     } | null
     const choice = json?.choices?.[0]
@@ -83,7 +86,14 @@ export class OpenAICompatProvider implements LLMProvider {
       for await (const frame of parseSse(res.body)) {
         if (frame.data === '[DONE]') break
         const chunk = safeJson(frame.data) as {
-          choices?: { delta?: { content?: string | null; tool_calls?: (Partial<OaiToolCall> & { index: number; function?: { name?: string; arguments?: string } })[] }; finish_reason?: string | null }[]
+          choices?: {
+            delta?: {
+              content?: string | null
+              reasoning_content?: string | null   // SPEC-GAP: DeepSeek R1/v4-flash 思考流
+              tool_calls?: (Partial<OaiToolCall> & { index: number; function?: { name?: string; arguments?: string } })[]
+            }
+            finish_reason?: string | null
+          }[]
           usage?: { prompt_tokens?: number; completion_tokens?: number } | null
         }
         if (chunk.usage) usage = { in: chunk.usage.prompt_tokens ?? 0, out: chunk.usage.completion_tokens ?? 0 }
@@ -91,6 +101,11 @@ export class OpenAICompatProvider implements LLMProvider {
         if (!choice) continue
         if (choice.finish_reason) finish = choice.finish_reason
         const delta = choice.delta
+        // 为什么 reasoning 先于 content 判断：上游 reasoning 阶段 content 恒为 null，
+        // 顺序无冲突；把 reasoning 独立成一路让 UI 能与正文分开渲染（老 UI 未识别帧自动丢弃）
+        if (delta?.reasoning_content) {
+          yield { type: 'reasoning', text: delta.reasoning_content }
+        }
         if (delta?.content) {
           outChars += delta.content.length
           yield { type: 'delta', text: delta.content }

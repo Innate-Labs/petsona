@@ -65,11 +65,15 @@ export function toStopReason(finish: string | null | undefined): LlmChatResponse
 }
 
 // OpenAI 非流式 choice.message → 契约 content 块
+// SPEC-GAP: reasoning_content 是 DeepSeek R1 / v4-flash 非标扩展字段，OpenAI 官方无此键；
+// 有值时前置 reasoning 块，纯 text 模型走原路径不受影响
 export function fromOaiMessage(msg: {
   content?: string | null
+  reasoning_content?: string | null
   tool_calls?: OaiToolCall[]
 }): LlmContentBlock[] {
   const blocks: LlmContentBlock[] = []
+  if (msg.reasoning_content) blocks.push({ type: 'reasoning', text: msg.reasoning_content })
   if (msg.content) blocks.push({ type: 'text', text: msg.content })
   for (const c of msg.tool_calls ?? []) {
     blocks.push({ type: 'tool_use', id: c.id, name: c.function.name, input: safeJson(c.function.arguments) })

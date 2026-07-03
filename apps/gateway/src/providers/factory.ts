@@ -12,8 +12,23 @@ import { AnthropicProvider } from './anthropic.js'
 // 真实 provider 复用实例避免每请求重复构造。env 变更（测试场景）用 key 区分即可失效。
 const cache = new Map<string, LLMProvider>()
 
-export function createProvider(tier: LlmTier): LLMProvider {
+export type CreateProviderOpts = {
+  // BYOK：用户 header x-petsona-user-llm-key 传入的 key；有值时不走缓存，一次性 provider
+  apiKeyOverride?: string
+}
+
+export function createProvider(tier: LlmTier, opts?: CreateProviderOpts): LLMProvider {
   const name = envStr('LLM_PROVIDER', 'mock').toLowerCase()
+  // BYOK：openai 档 + override 有值 → 一次性 provider（不缓存，避免用户 key 泄漏到 admin 请求）
+  if (opts?.apiKeyOverride && name === 'openai') {
+    const p = tier === 'cheap' && process.env.LLM_CHEAP_API_KEY ? 'LLM_CHEAP' : 'LLM_MAIN'
+    return new OpenAICompatProvider({
+      baseUrl: envStr(`${p}_BASE_URL`, 'https://api.deepseek.com'),
+      apiKey: opts.apiKeyOverride,
+      model: envStr(`${p}_MODEL`, ''),
+      label: `${p}(${tier}, BYOK)`,
+    })
+  }
   const key = cacheKey(name, tier)
   const hit = cache.get(key)
   if (hit) return hit

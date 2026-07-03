@@ -17,9 +17,11 @@ export class ProviderError extends Error {
   }
 }
 
-// 流式产出的帧（与 shared/llm.ts SSE 四帧一一对应；error 走异常通道不占帧位）
+// 流式产出的帧（与 shared/llm.ts SSE 帧一一对应；error 走异常通道不占帧位）
+// SPEC-GAP: reasoning 变体承接 DeepSeek R1 / v4-flash 的 delta.reasoning_content
 export type ProviderChunk =
   | { type: 'delta'; text: string }
+  | { type: 'reasoning'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'done'; stopReason: 'end_turn' | 'tool_use'; usage: { in: number; out: number } }
 

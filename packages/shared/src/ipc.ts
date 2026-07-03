@@ -37,6 +37,9 @@ export const IPC = {
   // 对话类
   CHAT_SEND: 'CHAT_SEND',
   CHAT_CHUNK: 'CHAT_CHUNK',
+  // SPEC-GAP: reasoning 模型（DeepSeek R1/v4-flash）思考流独立走 CHAT_REASONING，
+  // 与 CHAT_CHUNK 正文分开渲染；老 UI 收到该事件会被 dispatch 表忽略（backward-compat）
+  CHAT_REASONING: 'CHAT_REASONING',
   CHAT_TOOLING: 'CHAT_TOOLING',
   CHAT_DONE: 'CHAT_DONE',
   CHAT_ERROR: 'CHAT_ERROR',
@@ -72,6 +75,11 @@ export const IPC = {
   LOGIN_REQUEST_CODE: 'LOGIN_REQUEST_CODE',
   LOGIN_SUBMIT: 'LOGIN_SUBMIT',
   LOGOUT: 'LOGOUT',
+  // BYOK：用户自带 LLM key 存 Keychain（服从 CLAUDE.md「token 只进 Keychain」硬边界），
+  // 每次 chat 由 harness 携带 x-petsona-user-llm-key header，网关按请求覆盖 provider key
+  LLM_KEY_GET: 'LLM_KEY_GET',
+  LLM_KEY_SET: 'LLM_KEY_SET',
+  LLM_KEY_CLEAR: 'LLM_KEY_CLEAR',
   AUTH_STATE_CHANGED: 'AUTH_STATE_CHANGED',
   AUTH_STATE_GET: 'AUTH_STATE_GET',
   SYS_PERMISSION_STATE: 'SYS_PERMISSION_STATE',
@@ -87,6 +95,7 @@ export type IpcType = (typeof IPC)[keyof typeof IPC]
 // 对话类
 export type ChatSendPayload = { text: string }
 export type ChatChunkPayload = { turnId: string; delta: string }
+export type ChatReasoningPayload = { turnId: string; delta: string }
 export type ChatToolingPayload = { turnId: string; tool: string; note: string }
 export type ChatDonePayload = { turnId: string; reply: string; bubble: string }  // bubble ≤18 字
 export type ChatErrorPayload = { turnId: string; code: ErrCode; petLine: string }
@@ -141,8 +150,13 @@ export type ConfigGetRes = { config: Config }
 
 // 登录类（payload 结构继承 v2.1 §3.2 登录类；H 代理调网关并管 Keychain）
 export type LoginRequestCodePayload = { email: string }
-export type LoginSubmitPayload = { email: string; code: string }
+// 双凭证兼容：code 走老验证码路径（tests + 老客户端）；password 走桌面单步登录/注册路径
+export type LoginSubmitPayload = { email: string; code?: string; password?: string }
 export type AuthStateChangedPayload = { loginState: LoginState; email?: string }
+
+// BYOK：LLM_KEY_GET 只回布尔 + 末四位掩码，永不回全量明文（防日志/截屏泄露）
+export type LlmKeyGetRes = { hasKey: boolean; maskedTail?: string }
+export type LlmKeySetPayload = { key: string }
 
 // 系统类
 export type SysPermissionStatePayload = {

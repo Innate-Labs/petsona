@@ -48,6 +48,8 @@ async function streamOut(reply: FastifyReply, iter: AsyncIterable<ProviderChunk>
   try {
     for await (const chunk of iter) {
       if (chunk.type === 'delta') sseWrite(reply, 'delta', { text: chunk.text })
+      // SPEC-GAP: reasoning 帧不记账（DeepSeek 上游 usage 只在末帧统计正文 completion_tokens）
+      else if (chunk.type === 'reasoning') sseWrite(reply, 'reasoning', { text: chunk.text })
       else if (chunk.type === 'tool_use') sseWrite(reply, 'tool_use', { id: chunk.id, name: chunk.name, input: chunk.input })
       else {
         recordUsage(chunk.usage, taskId)   // done 帧记账（导出到 ledger，供限流/预算共用）
@@ -99,7 +101,11 @@ export function registerLlmRoutes(app: FastifyInstance): void {
     }
 
     // ⑥ 调 Provider（tier 双档；缺 key 工厂已回落 mock）
-    const provider = createProvider(body.tier)
+    // BYOK：客户端在 Keychain 存了自己的 LLM key 时，harness 把它作为 header 透传，
+    // 网关仅当此请求使用（不缓存 provider 实例，防跨请求泄漏）
+    const userKey = req.headers['x-petsona-user-llm-key']
+    const apiKeyOverride = typeof userKey === 'string' && userKey.length > 0 ? userKey : undefined
+    const provider = createProvider(body.tier, apiKeyOverride ? { apiKeyOverride } : undefined)
     const call = provider.chat({
       system: body.system,
       messages: body.messages,

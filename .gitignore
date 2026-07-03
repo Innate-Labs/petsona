@@ -5,6 +5,7 @@ target/
 .DS_Store
 .env
 .env.local
+.auth-store.json
 coverage/
 .petsona-dev-data/
 apps/shell/src-tauri/gen/
