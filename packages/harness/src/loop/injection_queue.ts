@@ -12,10 +12,18 @@ export class InjectionQueue {
     this.items.push(item)
   }
 
-  drain(now = Date.now()): InjectionItem[] {
+  drain(now = Date.now(), eligible: (i: InjectionItem) => boolean = () => true): InjectionItem[] {
     this.items = this.items.filter((i) => !i.expiresAt || i.expiresAt > now)
-    const sorted = [...this.items].sort((a, b) => a.priority - b.priority)
+    const sorted = this.items.filter(eligible).sort((a, b) => a.priority - b.priority)
     const taken = sorted.slice(0, INJECTION_MAX_PER_TURN)
+    this.items = this.items.filter((i) => !taken.includes(i))
+    return taken
+  }
+
+  /** 谓词命中全取（不限 3 条）——提醒消费器用；过期项同样先丢弃 */
+  drainWhere(pred: (i: InjectionItem) => boolean, now = Date.now()): InjectionItem[] {
+    this.items = this.items.filter((i) => !i.expiresAt || i.expiresAt > now)
+    const taken = this.items.filter(pred)
     this.items = this.items.filter((i) => !taken.includes(i))
     return taken
   }

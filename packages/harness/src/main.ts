@@ -125,7 +125,8 @@ export function createHarness(emitLine: (line: string) => void) {
   hooks.onPreTurn('track_start', async () => { /* 对话_发起在 loop 内带字数埋点，这里保管线位 */ })
   hooks.onPreLLM('memory_assemble', async () => { /* 装配在 loop 内执行（需 triggers/预算上下文），此处保管线位 */ })
   hooks.onPreLLM('injection_drain', async (ctx) => {
-    const items = queue.drain()
+    // 提醒条目（<reminder …/>）由 ReminderConsumer 直出气泡，不进 LLM 上下文——避免双重播报
+    const items = queue.drain(Date.now(), (i) => !i.content.startsWith('<reminder '))
     if (items.length) {
       ctx.messages.push({ role: 'user', content: items.map((i) => i.content).join('\n') })
     }

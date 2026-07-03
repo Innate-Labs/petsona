@@ -36,6 +36,11 @@ export class CompanionLoop {
 
   constructor(private deps: CompanionDeps) {}
 
+  /** 提醒消费器只在循环空闲时直出气泡（§3.8 陪伴循环空闲时消费） */
+  get isBusy(): boolean {
+    return this.busy
+  }
+
   async handleChatSend(text: string): Promise<{ turnId: string }> {
     const turnId = `turn_${randomUUID().slice(0, 8)}`
     // 不阻塞 res：异步跑整轮，事件流推进 UI
