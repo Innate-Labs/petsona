@@ -1,11 +1,12 @@
 // pet/Sprite.tsx —— 宠物形象渲染：情绪→语义姿势→当前角色资产（视频优先，图集兜底）
 // 角色可插拔：本组件不 import 任何具体美术资产（lib/character.ts 是唯一出口）。
 //
-// 防空窗定案（第五轮）：全部姿势视频**常驻同播**，切姿势只切透明度。
-// 前两版的教训：a) key 重挂载换源 → WKWebView 重走加载/解码，必有透明空窗；
-// b) 双缓冲若给垫底元素换 key，React 视为新元素照样重挂载，两路一起空窗；
-// c)「起播超时判坏源」看门狗在冷启动被 tauri 协议的首载耗时误伤，永久回退旧图集。
-// 常驻同播后视频元素从不重建，切换零加载零空窗；素材共 ~10MB 本地资产，硬解常驻可接受。
+// 防空窗定案（第五、六轮迭代）：全部姿势视频**常驻挂载**，元素终身不重建（重建即重加载
+// 即空窗，WKWebView 铁律）。但只有 active 那路在解码播放，其余**暂停并停在第 0 帧**：
+//   · 第五轮全员同播的两个真机症状——5 路 HEVC-alpha（每路双层解码）同跑导致卡顿；
+//     隐藏层循环到一半被切出来先闪中段画面、异步 seek 又拉回 0 帧，肉眼即「动作重复播两遍」。
+//   · 暂停停 0 帧后：切换瞬间直接显示动作第 0 帧 → play()，单次完整播放，无闪跳无卡顿。
+// 仍不加「起播超时判坏源」看门狗：冷启动首载会被误伤（第四轮教训）。
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Emotion } from '@petsona/shared'
@@ -23,17 +24,24 @@ function PoseMedia({ pose }: { pose: PoseName }) {
   const sitSrc = poseVideo('sit')
   const active =
     want && !brokenSrcs.includes(want) ? want : sitSrc && !brokenSrcs.includes(sitSrc) ? sitSrc : null
+  // 给异步回调（onLoadedMetadata）读当前 active 用，避免闭包吃到旧值
+  const activeRef = useRef(active)
+  activeRef.current = active
+
+  const park = (el: HTMLVideoElement) => {
+    el.pause()
+    try {
+      el.currentTime = 0 // 停回第 0 帧：下次被切换到时直接从动作开头亮相
+    } catch {
+      // 元数据未就绪时 seek 会抛；onLoadedMetadata 会再补一次
+    }
+  }
 
   useEffect(() => {
-    // 动作从头播：切过去的瞬间把目标视频拨回第 0 帧（已解码，seek 即时）
-    const el = active ? refs.current.get(active) : undefined
-    if (!el) return
-    try {
-      el.currentTime = 0
-    } catch {
-      // 元数据未就绪时 seek 会抛，忽略——首播本来就是第 0 帧
+    for (const [s, el] of refs.current) {
+      if (s === active) void el.play().catch(() => {})
+      else park(el)
     }
-    void el.play().catch(() => {})
   }, [active])
 
   if (!active || allSrcs.length === 0) return <div className="sprite-img" style={poseStyle(pose)} />
@@ -50,11 +58,16 @@ function PoseMedia({ pose }: { pose: PoseName }) {
           className="sprite-video sprite-video--layer"
           style={{ opacity: s === active ? 1 : 0 }}
           src={s}
+          preload="auto"
+          // autoPlay 只为触发加载管线；非 active 的在元数据就绪后立刻停回 0 帧
           autoPlay
           loop
           muted
           playsInline
           disablePictureInPicture
+          onLoadedMetadata={(e) => {
+            if (s !== activeRef.current) park(e.currentTarget)
+          }}
           onError={() => setBrokenSrcs((prev) => (prev.includes(s) ? prev : [...prev, s]))}
         />
       ))}

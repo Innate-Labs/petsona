@@ -22,8 +22,9 @@ import { Bubble } from './Bubble'
 
 // 单击轮换的动作池（第五轮：用户指定这三个；wave 留给拖拽专用）
 const CLICK_ACTIONS: PoseName[] = ['yawn', 'stretch', 'cheer']
-// 各动作视频实测时长（AVFoundation）：播完整一遍再回落，不足会截断动作
-const ACTION_MS: Partial<Record<PoseName, number>> = { yawn: 4800, stretch: 4650, cheer: 4800, wave: 4050 }
+// 各动作播放窗口：取 AVFoundation 实测时长再收 100ms——必须略短于视频实长，
+// 否则 loop 会在计时器到点前兜回第 0 帧，肉眼即「动作重复播了第二遍的开头」
+const ACTION_MS: Partial<Record<PoseName, number>> = { yawn: 4650, stretch: 4500, cheer: 4650, wave: 3900 }
 // 双击窗口：间隔 <= 此值的两次单击视为双击开面板
 const DOUBLE_CLICK_MS = 260
 // 待提醒轮询：面板写 localStorage（同源共享），这里每 30s 扫一次到点未通知项
@@ -82,8 +83,9 @@ export function PetWindow() {
   useTodoAlarm(setBubble)
 
   const triggerAction = (pose: PoseName) => {
+    // 动作期间锁定（第六轮验收要求）：正在播的动作必须完整放完，点击/拖拽都不得中途换动作
+    if (actionTimer.current !== null) return
     setAction(pose)
-    if (actionTimer.current !== null) clearTimeout(actionTimer.current)
     actionTimer.current = setTimeout(() => {
       actionTimer.current = null
       setAction(null)
@@ -138,6 +140,7 @@ export function PetWindow() {
     if (clickPending.current !== null) clearTimeout(clickPending.current)
     clickPending.current = setTimeout(() => {
       clickPending.current = null
+      if (actionTimer.current !== null) return // 动作播放中：忽略点击，也不推进轮换序号
       // 三个动作轮着来：每次单击换下一个，比固定一个有生气
       const pose = CLICK_ACTIONS[clickIdx.current % CLICK_ACTIONS.length]!
       clickIdx.current += 1
