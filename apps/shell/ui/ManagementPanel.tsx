@@ -561,8 +561,14 @@ function SettingsPage() {
             <div>
               <strong>开关桌宠</strong>
             </div>
-            <button className={petVisible ? 'settings-switch on' : 'settings-switch'} type="button" onClick={() => void togglePet(!petVisible)}>
-              {petVisible ? '已显示' : '已隐藏'}
+            <button
+              className={petVisible ? 'settings-switch on' : 'settings-switch'}
+              type="button"
+              aria-label={petVisible ? '关闭桌宠显示' : '开启桌宠显示'}
+              title={petVisible ? '已显示' : '已隐藏'}
+              onClick={() => void togglePet(!petVisible)}
+            >
+              <span className="settings-switch-thumb" aria-hidden="true" />
             </button>
           </div>
         </section>
@@ -1140,6 +1146,20 @@ function HistoryPage({
   onDeleteConversation: (conversationId: string) => void;
 }) {
   const orderedGroups: HistoryConversation['group'][] = ['今天', '昨天', '本周', '本月', '更早'];
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredGroups = orderedGroups.reduce<Record<HistoryConversation['group'], HistoryConversation[]>>((next, group) => {
+    const items = groups[group].filter((conversation) => {
+      if (!normalizedQuery) return true;
+      return (
+        conversation.title.toLowerCase().includes(normalizedQuery) ||
+        conversation.timeLabel.toLowerCase().includes(normalizedQuery) ||
+        conversation.messages.some((message) => message.text.toLowerCase().includes(normalizedQuery))
+      );
+    });
+    next[group] = items;
+    return next;
+  }, { 今天: [], 昨天: [], 本周: [], 本月: [], 更早: [] });
 
   return (
     <section className="panel-history-page">
@@ -1148,13 +1168,20 @@ function HistoryPage({
         <h1 className="panel-page-title">历史对话</h1>
         <div className="panel-page-spacer" />
       </header>
-      <input className="panel-history-search" type="search" placeholder="搜索历史对话" aria-label="搜索历史对话" />
+      <input
+        className="panel-history-search"
+        type="search"
+        placeholder="搜索历史对话"
+        aria-label="搜索历史对话"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
       <div className="panel-history-groups">
         {orderedGroups.map((group) =>
-          groups[group].length ? (
+          filteredGroups[group].length ? (
             <section className="panel-history-group" key={group}>
               <h2>{group}</h2>
-              {groups[group].map((conversation) => (
+              {filteredGroups[group].map((conversation) => (
                 <div className="panel-history-result-row" key={conversation.id}>
                   <button type="button" onClick={() => onOpenConversation(conversation)}>
                     <span>{conversation.title}</span>

@@ -1297,6 +1297,12 @@ button {
   transition: opacity 120ms ease;
 }
 
+.panel-history-search {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+
 .panel-placeholder-page {
   align-content: start;
   gap: 10px;
@@ -1316,12 +1322,8 @@ button {
   grid-template-rows: 54px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  padding: 14px 18px 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(89 50 0 / 16%) transparent;
+  padding: 14px 18px 24px;
+  overflow: hidden;
 }
 
 .settings-content {
@@ -1329,7 +1331,14 @@ button {
   align-content: start;
   gap: 9px;
   min-height: 0;
-  padding: 2px 0 8px;
+  padding: 2px 0 24px;
+  padding-right: 14px;
+  margin-right: -14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(89 50 0 / 16%) transparent;
 }
 
 .settings-section {
@@ -1385,21 +1394,40 @@ button {
 }
 
 .settings-switch {
-  min-width: 78px;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgb(116 81 43 / 12%);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 32px;
+  width: 32px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgb(116 81 43 / 10%);
   border-radius: 999px;
-  color: #7a6149;
-  background: #f1e5d5;
+  color: #8f755a;
+  background: #ece8e2;
+  overflow: hidden;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
 }
 
 .settings-switch.on {
-  color: #fff8ef;
-  background: #4f8b5b;
+  color: #7a5633;
+  border-color: rgb(201 155 114 / 34%);
+  background: linear-gradient(135deg, #f0c89a 0%, #e2af79 100%);
+}
+
+.settings-switch-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fffdf9;
+  box-shadow: 0 3px 10px rgb(95 69 38 / 16%);
+  transition: transform .18s ease;
+}
+
+.settings-switch.on .settings-switch-thumb {
+  transform: translateX(16px);
 }
 
 .settings-slider-row {
@@ -1616,11 +1644,12 @@ button {
 .reminders-page {
   --reminder-ink: #402407;
   position: relative;
-  display: grid;
-  grid-template-rows: 54px auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   min-height: 100%;
-  padding-bottom: 10px;
+  padding-bottom: 84px;
   color: var(--reminder-ink);
 }
 
@@ -1634,18 +1663,67 @@ button {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--reminder-ink);
+  color: #5f3b15;
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
   -webkit-app-region: no-drag;
 }
 
 .reminder-history-button:hover {
   background: rgb(246 232 212 / 90%);
+  color: #5f3b15;
 }
 
-.reminder-history-button img {
-  width: 18px;
-  height: 18px;
+.reminder-history-button svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  pointer-events: none;
+  fill: currentColor;
+}
+
+.reminder-history-button path {
+  fill: currentColor;
+}
+
+.reminder-history-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  justify-self: start;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #7d5832;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  -webkit-app-region: no-drag;
+}
+
+.reminder-history-back:hover {
+  background: rgb(246 232 212 / 90%);
+  color: #5f3b15;
+}
+
+.reminder-history-back svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+  pointer-events: none;
+  fill: currentColor;
+}
+
+.reminder-history-back path {
+  fill: currentColor;
 }
 
 .remind-grid {
@@ -1832,8 +1910,12 @@ button {
 }
 
 .fab {
-  position: sticky;
+  position: absolute;
+  left: 50%;
   bottom: 8px;
+  margin-top: 0;
+  align-self: auto;
+  transform: translateX(-50%);
   display: grid;
   place-items: center;
   width: 51px;
@@ -2081,11 +2163,7 @@ button {
   min-height: 0;
   height: 100%;
   padding: 14px 18px 18px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(89 50 0 / 16%) transparent;
+  overflow: hidden;
 }
 
 .pet-data-content {
@@ -2093,6 +2171,15 @@ button {
   align-content: start;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
+  padding-bottom: 24px;
+  padding-right: 14px;
+  margin-right: -14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(89 50 0 / 16%) transparent;
 }
 
 .pet-data-identity {

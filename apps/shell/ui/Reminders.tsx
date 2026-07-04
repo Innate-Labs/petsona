@@ -23,7 +23,6 @@ import type { ReminderInstance, ReminderRepeat, ReminderState, ReminderTemplate 
 import { useDialog } from './ModalKit'
 import iconDelete from './assets/figma/icon-delete-28.svg'
 import iconCheck from './assets/figma/icon-check.svg'
-import iconHistory from './assets/figma/icon-history-18.svg'
 
 type TimedKind = 'pomodoro' | 'water' | 'stand'
 type CardDef = { kind: TimedKind; title: string }
@@ -262,7 +261,11 @@ export function Reminders() {
 
   const persist = (next: ReminderState) => { setState(next); saveReminderState(next) }
   const today = todayDate()
-  const todayItems = useMemo(() => sortTodayInstances(state.instances.filter((i) => i.date === today)), [state, today])
+  const todayItems = useMemo(() => sortTodayInstances(state.instances.filter((item) => {
+    if (item.date !== today) return false
+    if (item.templateId) return state.templates.some((t) => t.id === item.templateId && t.active && !t.deletedAt)
+    return item.source !== 'template'
+  })), [state, today])
   const historyRows = useMemo(() => reminderHistoryRows(state, 30), [state])
   const selectedItems = state.instances.filter((i) => i.date === selectedDate)
   const reminderSettings = settings ?? DEFAULT_REMINDER_SETTINGS
@@ -358,7 +361,16 @@ export function Reminders() {
     return (
       <div className="reminders-page">
         <div className="panel-page-header">
-          <button className="chip" onClick={backFromHistory}>返回</button>
+          <button
+            className="reminder-history-back"
+            onClick={backFromHistory}
+            aria-label={selectedDate ? '返回统计列表' : '返回提醒事项'}
+            title={selectedDate ? '返回统计列表' : '返回提醒事项'}
+          >
+            <svg viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+              <path d="M224.32 505.6a31.936 31.936 0 0 1 10.88-19.84l222.08-222.08a32 32 0 0 1 45.12 45.12l-169.28 169.28H768a32 32 0 0 1 0 64H333.12l169.28 169.28a32 32 0 1 1-45.12 45.44l-224-224a31.968 31.968 0 0 1-8.96-27.2z" />
+            </svg>
+          </button>
           <h1 className="panel-page-title">{selectedDate ?? '提醒统计'}</h1>
           <div className="panel-page-spacer" />
         </div>
@@ -384,7 +396,9 @@ export function Reminders() {
         <div className="panel-page-spacer" />
         <h1 className="panel-page-title">提醒事项</h1>
         <button className="reminder-history-button" onClick={() => setMode('history')} aria-label="提醒统计" title="提醒统计">
-          <img src={iconHistory} alt="" />
+          <svg viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+            <path d="M778.24 61.44a122.88 122.88 0 0 1 122.88 122.88v655.36a122.88 122.88 0 0 1-122.88 122.88H245.76a122.88 122.88 0 0 1-122.88-122.88V184.32a122.88 122.88 0 0 1 122.88-122.88h532.48z m0 61.44H245.76a61.44 61.44 0 0 0-61.3376 57.83552L184.32 184.32v655.36a61.44 61.44 0 0 0 57.83552 61.3376L245.76 901.12h532.48a61.44 61.44 0 0 0 61.3376-57.83552L839.68 839.68V184.32a61.44 61.44 0 0 0-57.83552-61.3376L778.24 122.88zM563.2 532.48a30.72 30.72 0 0 1 0 61.44h-266.24a30.72 30.72 0 0 1 0-61.44h266.24z m163.84-225.28a30.72 30.72 0 0 1 0 61.44h-430.08a30.72 30.72 0 0 1 0-61.44h430.08z" />
+          </svg>
         </button>
       </div>
       <div className="remind-grid">

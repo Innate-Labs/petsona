@@ -29,6 +29,11 @@ describe('Reminders page SPEC structure', () => {
     expect(page).toContain("selectedDate ? setSelectedDate(null) : setMode('today')")
     expect(css).toContain('padding: 14px 18px 18px')
     expect(css).toContain('-webkit-app-region: no-drag')
+    expect(page).toContain('className="reminder-history-back"')
+    expect(page).toContain("aria-label={selectedDate ? '返回统计列表' : '返回提醒事项'}")
+    expect(page).toContain('<svg viewBox="0 0 1024 1024"')
+    expect(page).toContain('<path d="M224.32 505.6a31.936 31.936 0 0 1 10.88-19.84')
+    expect(page).not.toContain('<button className="chip" onClick={backFromHistory}>返回</button>')
   })
 
   it('shows countdowns and editable settings for all timed cards', () => {
@@ -80,6 +85,10 @@ describe('Reminders page SPEC structure', () => {
     expect(css).toContain('.reminders-page')
     expect(css).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))')
     expect(css).toContain('.reminder-history-button')
+    expect(css).toContain('.reminder-history-back')
+    expect(css).toContain('transition: background .12s ease, color .12s ease;')
+    expect(css).toContain('.reminder-history-back svg')
+    expect(css).toContain('pointer-events: none;')
     expect(css).toContain('.reminder-form')
     expect(css).toContain('.weekday-grid')
   })
@@ -87,5 +96,11 @@ describe('Reminders page SPEC structure', () => {
   it('uses the existing deep brown text color across reminder page content', () => {
     expect(css).toContain('--reminder-ink: #402407')
     expect(css).toContain('color: var(--reminder-ink)')
+  })
+
+  it('filters deleted template snapshots out of the today reminder rows', () => {
+    expect(page).toContain('const todayItems = useMemo(() => sortTodayInstances(')
+    expect(page).toContain("if (item.templateId) return state.templates.some((t) => t.id === item.templateId && t.active && !t.deletedAt)")
+    expect(page).toContain("return item.source !== 'template'")
   })
 })

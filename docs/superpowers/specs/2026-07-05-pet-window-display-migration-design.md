@@ -6,7 +6,7 @@ Restore the desktop pet window in `petsona-main` to the stable display behavior 
 
 ## Problem
 
-The current desktop pet window at `apps/shell/ui/pet/PetWindow.tsx` renders through `pet/Sprite.tsx`, but the working demo display logic lives in `demo_v0.1/src/renderer/PetVideoLayer.tsx`. At the same time, the checked-in asset paths have moved from `assets/characters/final-pet/` to `assets/characters/final-pet-alpha/`, so the existing imports used by `petAnimations.ts` and `lib/character.ts` no longer match the files currently present in the repo.
+The current desktop pet window at `apps/shell/ui/pet/PetWindow.tsx` renders through `pet/Sprite.tsx`, but the working demo display logic lives in `demo_v0.1/src/renderer/PetVideoLayer.tsx`. During the repair, the checked-in `final-pet/` video assets were found missing from the live asset directory, so the display path had to be restored to the official `assets/characters/final-pet/` location using the backed-up `.mov` sources.
 
 ## Scope
 
@@ -17,7 +17,7 @@ In scope:
 - Switch `apps/shell/ui/pet/PetWindow.tsx` from `Sprite` to `PetVideoLayer`
 - Reuse `apps/shell/ui/petAnimations.ts` as the pet-window animation source
 - Keep Petsona-specific window interactions, bubble behavior, reminder behavior, and menu behavior intact
-- Update imports that still point at the removed `final-pet/` asset folder
+- Update imports so display-critical files point back to the restored `final-pet/` asset folder
 - Add or update tests that lock the pet window to the migrated display model
 
 Out of scope:
@@ -46,7 +46,7 @@ Only the visual renderer changes; shell behavior stays in place.
 
 ### Asset resolution
 
-Because the repo currently contains only `apps/shell/ui/assets/characters/final-pet-alpha/*.mov`, the shared animation imports must be updated to use that folder. Any remaining references to `final-pet/` in display-critical files should be switched to `final-pet-alpha/`.
+The canonical runtime asset directory should remain `apps/shell/ui/assets/characters/final-pet/`. Any temporary references to alternate asset folders should be removed once the backed-up `.mov` files have been restored there.
 
 ## Testing
 

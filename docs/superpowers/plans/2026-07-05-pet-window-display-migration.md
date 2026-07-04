@@ -4,7 +4,7 @@
 
 **Goal:** Restore the `petsona-main` desktop pet window to the working `demo_v0.1` display logic while preserving the current Petsona shell behaviors.
 
-**Architecture:** Keep the current Petsona pet-window event handling, reminder bubble, and shell commands, but swap the render layer in `apps/shell/ui/pet/PetWindow.tsx` from `Sprite` to `PetVideoLayer`. Repair pet animation asset imports so both the migrated pet window and the existing shell pet view compile against the current `final-pet-alpha` asset directory.
+**Architecture:** Keep the current Petsona pet-window event handling, reminder bubble, and shell commands, but swap the render layer in `apps/shell/ui/pet/PetWindow.tsx` from `Sprite` to `PetVideoLayer`. Restore the official `final-pet/` asset directory from backup and point both the migrated pet window and the existing shell pet view back to that canonical runtime path.
 
 **Tech Stack:** React, TypeScript, Vite, Vitest, Tauri shell UI
 
@@ -97,7 +97,7 @@ git add apps/shell/ui/pet/PetWindow.tsx tests/unit/pet.window.behavior.test.ts
 git commit -m "fix: align pet window animation state with demo renderer"
 ```
 
-### Task 3: Repair pet video asset imports to the current alpha directory
+### Task 3: Repair pet video asset imports to the restored official directory
 
 **Files:**
 - Modify: `apps/shell/ui/petAnimations.ts`
@@ -108,23 +108,23 @@ git commit -m "fix: align pet window animation state with demo renderer"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-it('loads pet animations from the current final-pet-alpha asset directory', () => {
-  expect(petAnimations).toContain("import dragVideo from './assets/characters/final-pet-alpha/wave.mov';")
-  expect(petAnimations).toContain("import yawnVideo from './assets/characters/final-pet-alpha/yawn.mov';")
-  expect(petAnimations).toContain("import stretchVideo from './assets/characters/final-pet-alpha/stretch.mov';")
-  expect(petAnimations).toContain("import idleVideo from './assets/characters/final-pet-alpha/sit.mov';")
-  expect(petAnimations).toContain("import lickVideo from './assets/characters/final-pet-alpha/cheer.mov';")
+it('loads pet animations from the restored final-pet asset directory', () => {
+  expect(petAnimations).toContain("import dragVideo from './assets/characters/final-pet/wave.mov';")
+  expect(petAnimations).toContain("import yawnVideo from './assets/characters/final-pet/yawn.mov';")
+  expect(petAnimations).toContain("import stretchVideo from './assets/characters/final-pet/stretch.mov';")
+  expect(petAnimations).toContain("import idleVideo from './assets/characters/final-pet/sit.mov';")
+  expect(petAnimations).toContain("import lickVideo from './assets/characters/final-pet/cheer.mov';")
 })
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `corepack pnpm vitest run tests/unit/pet.video.autoplay.test.ts`
-Expected: FAIL because `petAnimations.ts` still imports `final-pet/`
+Expected: FAIL because `petAnimations.ts` still imports the wrong asset directory
 
 - [ ] **Step 3: Write minimal implementation**
 
-Update `apps/shell/ui/petAnimations.ts` and `apps/shell/ui/lib/character.ts` so video imports point at `apps/shell/ui/assets/characters/final-pet-alpha/`.
+Restore the backup `.mov` files into `apps/shell/ui/assets/characters/final-pet/`, then update `apps/shell/ui/petAnimations.ts` and `apps/shell/ui/lib/character.ts` so video imports point at that official runtime directory.
 
 - [ ] **Step 4: Run test to verify it passes**
 

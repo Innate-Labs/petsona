@@ -157,4 +157,18 @@ describe('UI 迁移：保留 demo_v0.1 视觉资产但不替换壳契约', () =>
     expect(floatChat).toContain('chat-shell')
     expect(petWindow).toContain('pet-stage')
   })
+
+  it('restores the official final-pet asset directory without final-pet-alpha leftovers', () => {
+    const petAnimations = readFileSync(join(ROOT, 'apps/shell/ui/petAnimations.ts'), 'utf8')
+    const character = readFileSync(join(ROOT, 'apps/shell/ui/lib/character.ts'), 'utf8')
+    const spec = readFileSync(join(ROOT, 'docs/superpowers/specs/2026-07-05-pet-window-display-migration-design.md'), 'utf8')
+    const plan = readFileSync(join(ROOT, 'docs/superpowers/plans/2026-07-05-pet-window-display-migration.md'), 'utf8')
+
+    expect(petAnimations).toContain('final-pet/')
+    expect(character).toContain('final-pet/')
+    expect(petAnimations).not.toContain('final-pet-alpha')
+    expect(character).not.toContain('final-pet-alpha')
+    expect(spec).not.toContain('final-pet-alpha')
+    expect(plan).not.toContain('final-pet-alpha')
+  })
 })
