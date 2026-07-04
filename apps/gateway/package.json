@@ -1,0 +1,22 @@
+{
+  "name": "@petsona/gateway",
+  "version": "3.0.0",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@petsona/shared": "workspace:*",
+    "fastify": "^5.2.0",
+    "@fastify/cors": "^10.0.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
