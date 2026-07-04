@@ -18,6 +18,14 @@ function constBlock(source: string, marker: string): string {
 }
 
 describe('pet video autoplay', () => {
+  it('loads pet animations from the restored final-pet asset directory', () => {
+    expect(petAnimations).toContain("import dragVideo from './assets/characters/final-pet/wave.mov';")
+    expect(petAnimations).toContain("import yawnVideo from './assets/characters/final-pet/yawn.mov';")
+    expect(petAnimations).toContain("import stretchVideo from './assets/characters/final-pet/stretch.mov';")
+    expect(petAnimations).toContain("import idleVideo from './assets/characters/final-pet/sit.mov';")
+    expect(petAnimations).toContain("import lickVideo from './assets/characters/final-pet/cheer.mov';")
+  })
+
   it('keeps the native play overlay disabled while forcing muted inline autoplay', () => {
     expect(videoLayer).toContain('function prepareAutoplayVideo')
     expect(videoLayer).toContain('video.muted = true')

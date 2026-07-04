@@ -1,7 +1,7 @@
-// pet/PetWindow.tsx —— 悬浮宠物窗口：Sprite + Bubble + 整窗拖动 + 动作交互（§4 悬浮宠物窗口行）
+// pet/PetWindow.tsx —— 悬浮宠物窗口：PetVideoLayer + Bubble + 整窗拖动 + 动作交互（§4 悬浮宠物窗口行）
 //
 // 交互契约（第五轮真机验收后修订）：
-//   · 单击（无拖动）→ 在 打哈欠/伸懒腰/舔爪子 三个动作间轮换播放，播完回落情绪姿势。
+//   · 单击（无拖动）→ 在 打哈欠/伸懒腰/舔爪子 三个动作间轮换播放，播完回落待机动作。
 //   · 双击           → 打开主面板。
 //   · 拖拽（>4px）   → 整窗随鼠标移动，播放 wave（点击拖拽动作素材只在拖动时出现）。
 //   · 右下角猫爪手柄 → 系统级窗口角拖拽缩放。
@@ -11,9 +11,17 @@ import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, PointerEvent } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { IPC } from '@petsona/shared'
-import type { BubbleActionPayload, Emotion, PetBubblePayload, PetEmotionSignalPayload, PetPositionPayload } from '@petsona/shared'
-import { isTauri, on, send } from '../lib/ipc'
+import { DEFAULT_CONFIG, IPC } from '@petsona/shared'
+import type {
+  BubbleActionPayload,
+  Config,
+  Emotion,
+  PetBehaviorFrequency,
+  PetBubblePayload,
+  PetEmotionSignalPayload,
+  PetPositionPayload,
+} from '@petsona/shared'
+import { isTauri, on, request, send } from '../lib/ipc'
 import {
   dueInstances,
   ensureDayInstances,
@@ -22,17 +30,13 @@ import {
   saveReminderState,
   todayDate,
 } from '../lib/reminderStore'
-import type { PoseName } from '../lib/character'
+import { PetVideoLayer } from '../PetVideoLayer'
+import { DRAG_ANIMATION, IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from '../petAnimations'
+import { getNextActionIndex, getRandomTailHoldMs } from '../petAnimationScheduler'
 import { EmotionMachine } from './EmotionMachine'
-import { Sprite } from './Sprite'
 import { Bubble } from './Bubble'
 import { buildReminderBubble, completeFromBubbleAction, isReminderBubbleAction, snoozeFromBubbleAction } from './reminderAlarm'
 
-// 单击轮换的动作池（第五轮：用户指定这三个；wave 留给拖拽专用）
-const CLICK_ACTIONS: PoseName[] = ['yawn', 'stretch', 'cheer']
-// 各动作播放窗口：取 AVFoundation 实测时长再收 100ms——必须略短于视频实长，
-// 否则 loop 会在计时器到点前兜回第 0 帧，肉眼即「动作重复播了第二遍的开头」
-const ACTION_MS: Partial<Record<PoseName, number>> = { yawn: 4650, stretch: 4500, cheer: 4650, wave: 3900 }
 // 双击窗口：间隔 <= 此值的两次单击视为双击开面板
 const DOUBLE_CLICK_MS = 260
 // 待提醒轮询：正式 reminder store（同源共享），这里每 30s 扫一次到点未通知项
@@ -79,30 +83,44 @@ export function PetWindow() {
   if (machineRef.current === null) machineRef.current = new EmotionMachine()
   const machine = machineRef.current
 
-  const [emotion, setEmotion] = useState<Emotion>(machine.getState())
+  const [, setEmotion] = useState<Emotion>(machine.getState())
   const [bubble, setBubble] = useState<PetBubblePayload | null>(null)
-  const [action, setAction] = useState<PoseName | null>(null)
+  const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION)
+  const [actionIndex, setActionIndex] = useState(0)
+  const [behaviorFrequency, setBehaviorFrequency] = useState<PetBehaviorFrequency>(DEFAULT_CONFIG.pet.behaviorFrequency)
   // 为什么记 press 起点：区分「拖动」与「点击」——startDragging 一旦触发，webview 收不到后续 click
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
-  const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const animationRef = useRef<PetAnimation>(IDLE_ANIMATION)
+  const tailHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const clickPending = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const clickIdx = useRef(0)
   const lastPetMenuAt = useRef(0)
 
   useTodoAlarm(setBubble)
   useReminderBubbleActions()
 
-  const triggerAction = (pose: PoseName) => {
-    // 动作期间锁定（第六轮验收要求）：正在播的动作必须完整放完，点击/拖拽都不得中途换动作
-    if (actionTimer.current !== null) return
-    setAction(pose)
-    actionTimer.current = setTimeout(() => {
-      actionTimer.current = null
-      setAction(null)
-    }, ACTION_MS[pose] ?? 4000)
+  const switchAnimation = (nextAnimation: PetAnimation) => {
+    animationRef.current = nextAnimation
+    setAnimation(nextAnimation)
+  }
+
+  const clearTailHold = () => {
+    if (tailHoldTimerRef.current === null) return
+    clearTimeout(tailHoldTimerRef.current)
+    tailHoldTimerRef.current = null
   }
 
   useEffect(() => {
+    let alive = true
+    void request<{ config: Config }>(IPC.CONFIG_GET, {})
+      .then(({ config }) => {
+        if (alive) setBehaviorFrequency(config.pet?.behaviorFrequency ?? DEFAULT_CONFIG.pet.behaviorFrequency)
+      })
+      .catch(() => undefined)
+
+    const unsubConfig = on<{ config: Config }>(IPC.CONFIG_UPDATED, ({ config }) => {
+      setBehaviorFrequency(config.pet?.behaviorFrequency ?? DEFAULT_CONFIG.pet.behaviorFrequency)
+    })
+
     const unsubs = [
       machine.subscribe(setEmotion),
       on<PetEmotionSignalPayload>(IPC.PET_EMOTION_SIGNAL, (p) => machine.signal(p.state, p.cause)),
@@ -113,11 +131,32 @@ export function PetWindow() {
       on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble),
     ]
     return () => {
+      alive = false
+      unsubConfig()
       unsubs.forEach((u) => u())
-      if (actionTimer.current !== null) clearTimeout(actionTimer.current)
+      clearTailHold()
       if (clickPending.current !== null) clearTimeout(clickPending.current)
     }
   }, [machine])
+
+  const handleAnimationEnded = () => {
+    if (animationRef.current.id === 'drag') return
+    clearTailHold()
+    tailHoldTimerRef.current = setTimeout(() => {
+      if (animationRef.current.id === 'drag') return
+
+      if (animationRef.current.id === 'idle') {
+        setActionIndex((current) => {
+          const nextAnimation = PET_ACTION_SEQUENCE[current % PET_ACTION_SEQUENCE.length]!
+          switchAnimation(nextAnimation)
+          return getNextActionIndex(current, PET_ACTION_SEQUENCE.length)
+        })
+        return
+      }
+
+      switchAnimation(IDLE_ANIMATION)
+    }, getRandomTailHoldMs(behaviorFrequency))
+  }
 
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return
@@ -131,7 +170,8 @@ export function PetWindow() {
     // 折中为位移 >4px 才开始整窗拖动，点按手感不变，拖动无感知差异。
     if (Math.abs(e.screenX - p.x) + Math.abs(e.screenY - p.y) > 4) {
       p.dragging = true
-      triggerAction('wave') // 「点击拖拽动作」素材只在拖动时出现（第五轮契约）
+      clearTailHold()
+      switchAnimation(DRAG_ANIMATION)
       if (isTauri()) void getCurrentWindow().startDragging()
     }
   }
@@ -150,11 +190,14 @@ export function PetWindow() {
     if (clickPending.current !== null) clearTimeout(clickPending.current)
     clickPending.current = setTimeout(() => {
       clickPending.current = null
-      if (actionTimer.current !== null) return // 动作播放中：忽略点击，也不推进轮换序号
+      if (animationRef.current.id === 'drag') return
+      clearTailHold()
       // 三个动作轮着来：每次单击换下一个，比固定一个有生气
-      const pose = CLICK_ACTIONS[clickIdx.current % CLICK_ACTIONS.length]!
-      clickIdx.current += 1
-      triggerAction(pose)
+      setActionIndex((current) => {
+        const nextAnimation = PET_ACTION_SEQUENCE[current % PET_ACTION_SEQUENCE.length]!
+        switchAnimation(nextAnimation)
+        return getNextActionIndex(current, PET_ACTION_SEQUENCE.length)
+      })
     }, DOUBLE_CLICK_MS)
   }
 
@@ -196,18 +239,25 @@ export function PetWindow() {
     if (isTauri()) void getCurrentWindow().startResizeDragging('SouthEast')
   }
 
+  const onMouseUp = () => {
+    const wasDragging = press.current?.dragging ?? false
+    press.current = null
+    if (!wasDragging) return
+    switchAnimation(IDLE_ANIMATION)
+  }
+
   return (
     <main
       className="pet-stage pet-window"
       onPointerDownCapture={openPetMenuOnRightPointer}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
       onContextMenu={openPetContextMenu}
     >
       {bubble && <Bubble bubble={bubble} onDismiss={() => setBubble(null)} />}
       <div className="pet-hit-area sprite-hit" onClick={onSpriteClick} onDoubleClick={onSpriteDoubleClick}>
-        {/* action 期间播对应动作视频；ACTION_MS 后回落情绪姿势（EMOTION_META.pose） */}
-        <Sprite emotion={emotion} action={action} />
+        <PetVideoLayer activeAnimation={animation} onEnded={handleAnimationEnded} />
       </div>
       <button className="pet-resize-handle pet-resize" type="button" title="调整大小" aria-label="调整宠物大小" onMouseDown={onResizeGrip}>
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">

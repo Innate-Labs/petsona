@@ -27,6 +27,23 @@ function rustFunctionBody(name: string): string {
 }
 
 describe('pet window behavior', () => {
+  it('renders the desktop pet window through PetVideoLayer instead of Sprite', () => {
+    expect(petWindowUi).toContain("import { PetVideoLayer } from '../PetVideoLayer'")
+    expect(petWindowUi).toContain('<PetVideoLayer activeAnimation={animation} onEnded={handleAnimationEnded} />')
+    expect(petWindowUi).not.toContain("import { Sprite } from './Sprite'")
+    expect(petWindowUi).not.toContain('<Sprite emotion={emotion} action={action} />')
+  })
+
+  it('drives pet window actions with PetAnimation state from petAnimations', () => {
+    expect(petWindowUi).toContain(
+      "import { DRAG_ANIMATION, IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from '../petAnimations'"
+    )
+    expect(petWindowUi).toContain('const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION)')
+    expect(petWindowUi).toContain('switchAnimation(DRAG_ANIMATION)')
+    expect(petWindowUi).toContain('switchAnimation(IDLE_ANIMATION)')
+    expect(petWindowUi).not.toContain('const [action, setAction] = useState<PoseName | null>(null)')
+  })
+
   it('resizes the pet window through a dedicated shell command', () => {
     expect(shellLib).toContain('const MIN_PET_SIZE: f64 = 180.0;')
     expect(shellLib).toContain('const MAX_PET_SIZE: f64 = 420.0;')
