@@ -95,9 +95,10 @@ describe('settings page spec', () => {
     expect(body).toContain('IPC.LLM_KEY_GET')
     expect(body).toContain('IPC.LLM_KEY_SET')
     expect(body).toContain('IPC.LLM_KEY_CLEAR')
+    expect(body).toContain('IPC.LLM_DEBUG_TEST')
     expect(body).toContain("invoke('pet_visibility_get')")
     expect(body).toContain("invoke('pet_visibility_set'")
-    expect(body).toContain("invoke('llm_debug_test'")
+    expect(body).not.toContain("invoke('llm_debug_test'")
   })
 
   it('adds dedicated Tauri commands for settings page pet visibility and LLM testing', () => {
@@ -110,7 +111,8 @@ describe('settings page spec', () => {
   })
 
   it('has compact grouped settings styles inside the panel surface', () => {
-    expect(rule('.settings-page')).toContain('overflow-y: auto;')
+    expect(rule('.settings-page')).toContain('overflow: hidden;')
+    expect(rule('.settings-content')).toContain('overflow-y: auto;')
     expect(rule('.settings-section')).toContain('border: 1px solid')
     expect(rule('.settings-row')).toContain('grid-template-columns:')
     expect(rule('.settings-slider-row')).toContain('grid-template-columns:')
@@ -129,5 +131,6 @@ describe('settings page spec', () => {
     expect(ipc).toContain('case IPC.LLM_KEY_GET:')
     expect(ipc).toContain('case IPC.LLM_KEY_SET:')
     expect(ipc).toContain('case IPC.LLM_KEY_CLEAR:')
+    expect(ipc).toContain('case IPC.LLM_DEBUG_TEST:')
   })
 })

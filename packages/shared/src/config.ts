@@ -37,8 +37,8 @@ export const DEFAULT_CONFIG: Config = {
     behaviorFrequency: 'normal',
   },
   llmDebug: {
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-v4-flash',
   },
   reminders: {
     pomodoro: { focusMin: 25, restMin: 5 },   // SPEC-GAP: 规格未给番茄钟默认值，取行业惯例 25/5

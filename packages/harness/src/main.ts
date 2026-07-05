@@ -61,6 +61,7 @@ export function createHarness(emitLine: (line: string) => void) {
   bootstrapAssets(paths)
   const config = new ConfigStore(paths)
   const gateway = new GatewayClient(process.env.PETSONA_GATEWAY_URL || config.get().gatewayUrl)
+  gateway.setLlmDebugConfig(config.get().llmDebug)
   const db = new SessionsDb(paths.sessionsDb)
   const cold = new ColdFs(paths.coldDir, paths.memoryIndex)
   const store = new LocalMemoryStore(db, cold, gateway)
@@ -329,6 +330,7 @@ export function createHarness(emitLine: (line: string) => void) {
   router.onReq(IPC.CONFIG_SET, async (p: { patch: object }) => {
     const next = config.patch(p?.patch ?? {})
     gateway.setBaseUrl(next.gatewayUrl)
+    gateway.setLlmDebugConfig(next.llmDebug)
     emit({ type: IPC.CONFIG_UPDATED, payload: { config: next } })
     return { config: next }
   })
@@ -384,6 +386,7 @@ export function createHarness(emitLine: (line: string) => void) {
     await gateway.clearUserLlmApiKey()
     return { hasKey: false }
   })
+  router.onReq(IPC.LLM_DEBUG_TEST, async (p: { apiKey?: string | null }) => gateway.testUserLlmConnection(p?.apiKey))
 
   // 系统类（SH→H event）
   router.onEvent(IPC.SYS_PERMISSION_STATE, (p: typeof sysState) => {
@@ -422,7 +425,7 @@ export function createHarness(emitLine: (line: string) => void) {
     },
     shutdown: () => { scheduler.stop(); consumer.stop(); tracker.stop(); db.close() },
     // 测试钩子
-    _internals: { hooks, registry, subagentRegistry, staging, queue, pool, store, config, scheduler, heartbeat, consumer, get emotion() { return emotion } },
+    _internals: { hooks, registry, subagentRegistry, staging, queue, pool, store, config, gateway, scheduler, heartbeat, consumer, get emotion() { return emotion } },
   }
 }
 

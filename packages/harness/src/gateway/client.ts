@@ -2,7 +2,7 @@
 // 结构性约束单测扫描 fetch/axios 只允许出现在本文件
 
 import type {
-  ErrCode, LlmChatRequest, LlmChatResponse, LlmSseDone, LlmSseError, LlmSseToolUse,
+  Config, ErrCode, LlmChatRequest, LlmChatResponse, LlmSseDone, LlmSseError, LlmSseToolUse,
   MemorySyncPush, MemorySyncPushRes, MemorySyncPull, MemorySyncPullRes, TrackEvent,
 } from '@petsona/shared'
 // LlmSseReasoning 只用作 onReasoning 契约文档；实际 dispatch 用运行时字符串判断，
@@ -36,10 +36,17 @@ export class GatewayClient {
   private refreshToken: string | null = null
   // 用户自带 LLM key 内存缓存，避免每次请求都 spawn security CLI；startup 从 Keychain 载入
   private userLlmApiKey: string | null = null
+  private llmDebug: Config['llmDebug'] | null = null
 
   constructor(private baseUrl: string) {}
 
   setBaseUrl(url: string): void { this.baseUrl = url }
+  setLlmDebugConfig(config: Config['llmDebug']): void {
+    this.llmDebug = {
+      baseUrl: config.baseUrl.trim().replace(/\/$/, ''),
+      model: normalizeModel(config.model),
+    }
+  }
 
   // ---------- 凭证（内存 + Keychain，永不落磁盘） ----------
 
@@ -92,12 +99,41 @@ export class GatewayClient {
     return { hasKey: true, maskedTail: this.userLlmApiKey.slice(-4) }
   }
 
+  async testUserLlmConnection(apiKeyDraft?: string | null): Promise<{ ok: boolean; message: string }> {
+    const previous = this.userLlmApiKey
+    const draft = apiKeyDraft?.trim()
+    if (draft) this.userLlmApiKey = draft
+    if (!this.userLlmApiKey) throw new GatewayError('BAD_REQUEST', '请输入 API Key 后再测试连接')
+    if (!this.llmDebug?.baseUrl) throw new GatewayError('BAD_REQUEST', 'Base URL 不能为空')
+    if (!this.llmDebug?.model) throw new GatewayError('BAD_REQUEST', 'Model 不能为空')
+    try {
+      await this.chatOnce({
+        tier: 'main',
+        system: '',
+        messages: [{ role: 'user', content: 'ping' }],
+        stream: false,
+        maxTokens: 8,
+        meta: { loop: 'companion' },
+      })
+      return { ok: true, message: '连接成功' }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw new GatewayError('UPSTREAM', `连接失败：${message}`)
+    } finally {
+      if (draft) this.userLlmApiKey = previous
+    }
+  }
+
   private headers(json = true): Record<string, string> {
     const h: Record<string, string> = {}
     if (json) h['content-type'] = 'application/json'
     if (this.accessToken) h['authorization'] = `Bearer ${this.accessToken}`
     // BYOK header：只在 chat 请求带（headers() 通用；其它端点带上 gateway 也会忽略，无副作用）
-    if (this.userLlmApiKey) h['x-petsona-user-llm-key'] = this.userLlmApiKey
+    if (this.userLlmApiKey) {
+      h['x-petsona-user-llm-key'] = this.userLlmApiKey
+      if (this.llmDebug?.baseUrl) h['x-petsona-llm-base-url'] = this.llmDebug.baseUrl
+      if (this.llmDebug?.model) h['x-petsona-llm-model'] = this.llmDebug.model
+    }
     return h
   }
 
@@ -278,7 +314,7 @@ export class GatewayClient {
     if (response.status === 429) throw new GatewayError('RATE_LIMIT', '触发限流')
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      throw new GatewayError('UPSTREAM', `HTTP ${response.status}: ${text.slice(0, 200)}`)
+      throw new GatewayError('UPSTREAM', `HTTP ${response.status}: ${readHttpErrorMessage(text)}`)
     }
     return response.json() as Promise<T>
   }
@@ -288,4 +324,19 @@ function mapHttpToLlmErr(status: number): LlmSseError['code'] {
   if (status === 429) return 'RATE_LIMIT'
   if (status === 408 || status === 504) return 'TIMEOUT'
   return 'UPSTREAM'
+}
+
+function normalizeModel(model: string): string {
+  const trimmed = model.trim()
+  return trimmed.toLowerCase().startsWith('deepseek-') ? trimmed.toLowerCase() : trimmed
+}
+
+function readHttpErrorMessage(text: string): string {
+  try {
+    const body = JSON.parse(text) as { error?: { message?: unknown } }
+    if (typeof body.error?.message === 'string' && body.error.message.trim()) return body.error.message.slice(0, 200)
+  } catch {
+    // 非 JSON 上游错误直接截断展示
+  }
+  return text.slice(0, 200)
 }

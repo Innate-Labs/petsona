@@ -22,7 +22,14 @@ function parseFrames(payload: string): SseFrame[] {
     })
 }
 
-const MUTATED_ENVS = ['RATE_LIMIT_CHAT_PER_MIN', 'TASK_MAX_TOKENS', 'LLM_PROVIDER'] as const
+const MUTATED_ENVS = [
+  'RATE_LIMIT_CHAT_PER_MIN',
+  'TASK_MAX_TOKENS',
+  'LLM_PROVIDER',
+  'LLM_MAIN_API_KEY',
+  'LLM_MAIN_BASE_URL',
+  'LLM_MAIN_MODEL',
+] as const
 
 describe('POST /v1/llm/chat', () => {
   let app: FastifyInstance
@@ -53,6 +60,20 @@ describe('POST /v1/llm/chat', () => {
 
   it('401：未带 token', async () => {
     const res = await app.inject({ method: 'POST', url: '/v1/llm/chat', payload: chatBody() })
+    expect(res.statusCode).toBe(401)
+    expect(res.json().error.code).toBe('UNAUTHENTICATED')
+  })
+
+  it('401：未登录且未带 BYOK key', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/llm/chat',
+      headers: {
+        'x-petsona-llm-base-url': 'https://api.deepseek.com/v1',
+        'x-petsona-llm-model': 'deepseek-v4-flash',
+      },
+      payload: chatBody(),
+    })
     expect(res.statusCode).toBe(401)
     expect(res.json().error.code).toBe('UNAUTHENTICATED')
   })
@@ -165,5 +186,49 @@ describe('POST /v1/llm/chat', () => {
     })
     expect(res.statusCode).toBe(426)
     expect(res.json().error.code).toBe('UPGRADE_REQUIRED')
+  })
+
+  it('BYOK：按请求覆盖 OpenAI-compatible Base URL 与 Model', async () => {
+    const calls: Array<{ url: string; body: any; authorization: string | null }> = []
+    const originalFetch = globalThis.fetch
+    process.env.LLM_PROVIDER = 'mock'
+    process.env.LLM_MAIN_API_KEY = 'env-key'
+    process.env.LLM_MAIN_BASE_URL = 'https://env.example/v1'
+    process.env.LLM_MAIN_MODEL = 'env-model'
+    resetProviderCache()
+    globalThis.fetch = (async (input, init) => {
+      calls.push({
+        url: String(input),
+        body: JSON.parse(String(init?.body ?? '{}')),
+        authorization: new Headers(init?.headers).get('authorization'),
+      })
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/llm/chat',
+        headers: {
+          'x-petsona-user-llm-key': 'user-key',
+          'x-petsona-llm-base-url': 'https://api.deepseek.com/v1',
+          'x-petsona-llm-model': 'deepseek-v4-flash',
+        },
+        payload: chatBody({ stream: false }),
+      })
+
+      expect(res.statusCode).toBe(200)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toMatchObject({
+        url: 'https://api.deepseek.com/v1/chat/completions',
+        authorization: 'Bearer user-key',
+      })
+      expect(calls[0]?.body.model).toBe('deepseek-v4-flash')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

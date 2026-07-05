@@ -16,8 +16,8 @@ describe('shared config compiled output', () => {
     expect(sharedDist).toContain('pet:')
     expect(sharedDist).toContain("behaviorFrequency: 'normal'")
     expect(sharedDist).toContain('llmDebug:')
-    expect(sharedDist).toContain("baseUrl: 'https://api.openai.com/v1'")
-    expect(sharedDist).toContain("model: 'gpt-4o-mini'")
+    expect(sharedDist).toContain("baseUrl: 'https://api.deepseek.com/v1'")
+    expect(sharedDist).toContain("model: 'deepseek-v4-flash'")
 
     expect(sharedTypes).toContain('PetBehaviorFrequency')
     expect(sharedTypes).toContain('behaviorFrequency: PetBehaviorFrequency')

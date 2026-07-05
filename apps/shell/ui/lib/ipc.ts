@@ -214,6 +214,9 @@ function mockRespond(env: Envelope): void {
       mockLlmKeyTail = undefined
       mockRes(env, { hasKey: false })
       return
+    case IPC.LLM_DEBUG_TEST:
+      mockRes(env, { ok: true, message: '连接成功' })
+      return
     case IPC.AUTH_STATE_GET:
       mockRes(env, { loginState: 'anon' })
       return

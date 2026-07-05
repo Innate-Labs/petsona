@@ -67,9 +67,16 @@ async function streamOut(reply: FastifyReply, iter: AsyncIterable<ProviderChunk>
 
 export function registerLlmRoutes(app: FastifyInstance): void {
   app.post('/v1/llm/chat', async (req, reply) => {
-    // ① 鉴权
+    const userKey = req.headers['x-petsona-user-llm-key']
+    const apiKeyOverride = typeof userKey === 'string' && userKey.length > 0 ? userKey : undefined
+    const userBaseUrl = req.headers['x-petsona-llm-base-url']
+    const userModel = req.headers['x-petsona-llm-model']
+
+    // ① 鉴权。BYOK 场景允许未登录调试/聊天，因为用户 API Key 已在本机 Keychain；
+    // 无 BYOK 时仍要求云端 access token，避免匿名消耗服务端托管额度。
     const auth = requireUser(req)
-    if (!auth) return reply.code(401).send(errBody('UNAUTHENTICATED', '请先登录'))
+    if (!auth && !apiKeyOverride) return reply.code(401).send(errBody('UNAUTHENTICATED', '请先登录'))
+    const subject = auth?.sub ?? 'local-byok'
 
     // ② 请求校验
     const v = validate(req.body)
@@ -77,7 +84,7 @@ export function registerLlmRoutes(app: FastifyInstance): void {
     const body = v.req
 
     // ③ 限流（rate:chat:min|day:{userId}）
-    const rate = checkAndCountChat(auth.sub)
+    const rate = checkAndCountChat(subject)
     if (!rate.ok) {
       const msg = rate.reason === 'min' ? '说话太快啦，一分钟后再试' : '今天聊得够多了，明天再来吧'
       return reply.code(429).send(errBody('RATE_LIMIT', msg))
@@ -103,9 +110,13 @@ export function registerLlmRoutes(app: FastifyInstance): void {
     // ⑥ 调 Provider（tier 双档；缺 key 工厂已回落 mock）
     // BYOK：客户端在 Keychain 存了自己的 LLM key 时，harness 把它作为 header 透传，
     // 网关仅当此请求使用（不缓存 provider 实例，防跨请求泄漏）
-    const userKey = req.headers['x-petsona-user-llm-key']
-    const apiKeyOverride = typeof userKey === 'string' && userKey.length > 0 ? userKey : undefined
-    const provider = createProvider(body.tier, apiKeyOverride ? { apiKeyOverride } : undefined)
+    const provider = createProvider(body.tier, apiKeyOverride
+      ? {
+          apiKeyOverride,
+          baseUrlOverride: typeof userBaseUrl === 'string' && userBaseUrl.trim() ? userBaseUrl.trim() : undefined,
+          modelOverride: typeof userModel === 'string' && userModel.trim() ? userModel.trim() : undefined,
+        }
+      : undefined)
     const call = provider.chat({
       system: body.system,
       messages: body.messages,

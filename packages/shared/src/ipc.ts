@@ -80,6 +80,7 @@ export const IPC = {
   LLM_KEY_GET: 'LLM_KEY_GET',
   LLM_KEY_SET: 'LLM_KEY_SET',
   LLM_KEY_CLEAR: 'LLM_KEY_CLEAR',
+  LLM_DEBUG_TEST: 'LLM_DEBUG_TEST',
   AUTH_STATE_CHANGED: 'AUTH_STATE_CHANGED',
   AUTH_STATE_GET: 'AUTH_STATE_GET',
   SYS_PERMISSION_STATE: 'SYS_PERMISSION_STATE',
@@ -157,6 +158,8 @@ export type AuthStateChangedPayload = { loginState: LoginState; email?: string }
 // BYOK：LLM_KEY_GET 只回布尔 + 末四位掩码，永不回全量明文（防日志/截屏泄露）
 export type LlmKeyGetRes = { hasKey: boolean; maskedTail?: string }
 export type LlmKeySetPayload = { key: string }
+export type LlmDebugTestPayload = { apiKey?: string | null }
+export type LlmDebugTestRes = { ok: boolean; message: string }
 
 // 系统类
 export type SysPermissionStatePayload = {

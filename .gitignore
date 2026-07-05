@@ -9,3 +9,4 @@ target/
 coverage/
 .petsona-dev-data/
 apps/shell/src-tauri/gen/
+资源备份/

@@ -514,11 +514,13 @@ function SettingsPage() {
   const testLlmConnection = async () => {
     setTestingApi(true);
     try {
-      const result = await invoke('llm_debug_test', {
-        baseUrl: config.llmDebug.baseUrl,
-        apiKey: apiKeyDraft.trim() || null,
-        model: config.llmDebug.model
-      }) as { ok: boolean; message: string };
+      const { config: nextConfig } = await request<{ config: Config }>(IPC.CONFIG_SET, {
+        patch: { llmDebug: config.llmDebug }
+      });
+      setConfig(nextConfig);
+      const result = await request<{ ok: boolean; message: string }>(IPC.LLM_DEBUG_TEST, {
+        apiKey: apiKeyDraft.trim() || null
+      });
       showToast(result.message || (result.ok ? '连接成功' : '连接失败'));
     } catch (error) {
       showToast(error instanceof Error ? error.message : '连接失败');

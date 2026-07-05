@@ -15,17 +15,20 @@ const cache = new Map<string, LLMProvider>()
 export type CreateProviderOpts = {
   // BYOK：用户 header x-petsona-user-llm-key 传入的 key；有值时不走缓存，一次性 provider
   apiKeyOverride?: string
+  baseUrlOverride?: string
+  modelOverride?: string
 }
 
 export function createProvider(tier: LlmTier, opts?: CreateProviderOpts): LLMProvider {
   const name = envStr('LLM_PROVIDER', 'mock').toLowerCase()
-  // BYOK：openai 档 + override 有值 → 一次性 provider（不缓存，避免用户 key 泄漏到 admin 请求）
-  if (opts?.apiKeyOverride && name === 'openai') {
+  // BYOK：设置页只支持 OpenAI-compatible 配置；只要请求带用户 key，就构造一次性 provider，
+  // 不受网关默认 mock/openai/anthropic 开关影响，避免设置成功但聊天仍走 mock 或 env 模型。
+  if (opts?.apiKeyOverride) {
     const p = tier === 'cheap' && process.env.LLM_CHEAP_API_KEY ? 'LLM_CHEAP' : 'LLM_MAIN'
     return new OpenAICompatProvider({
-      baseUrl: envStr(`${p}_BASE_URL`, 'https://api.deepseek.com'),
+      baseUrl: opts.baseUrlOverride ?? envStr(`${p}_BASE_URL`, 'https://api.deepseek.com/v1'),
       apiKey: opts.apiKeyOverride,
-      model: envStr(`${p}_MODEL`, ''),
+      model: opts.modelOverride ?? envStr(`${p}_MODEL`, ''),
       label: `${p}(${tier}, BYOK)`,
     })
   }
