@@ -2,6 +2,7 @@
 
 export type ProactiveFrequency = 'high' | 'mid' | 'low' | 'off'
 export type PetBehaviorFrequency = 'quiet' | 'normal' | 'active'
+export type LlmProviderId = 'deepseek' | 'openai-compatible' | 'openrouter'
 
 export type Config = {
   gatewayUrl: string
@@ -9,6 +10,7 @@ export type Config = {
     behaviorFrequency: PetBehaviorFrequency
   }
   llmDebug: {
+    provider: LlmProviderId
     baseUrl: string
     model: string
   }
@@ -37,6 +39,7 @@ export const DEFAULT_CONFIG: Config = {
     behaviorFrequency: 'normal',
   },
   llmDebug: {
+    provider: 'deepseek',
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-v4-flash',
   },

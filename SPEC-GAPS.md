@@ -60,7 +60,7 @@
 | G10 | routes/track.ts | 埋点端点鉴权未定 | 不强制 Bearer（匿名设备起步） | 规格 §9 明确 |
 | G11 | 合规测试 | v2.1 原文 MUST 仅 7 条 | 第 8 条按「错误四码可区分」能力契约补齐 | 规格勘误 MUST 计数 |
 | G12 ⭐ | routes/auth.ts、auth/password.ts、auth/store.ts | 桌面暂无邮件服务，验证码流对用户不可用；规格未定义密码流 | 单步邮密登录：`/v1/auth/login` 接受 `{code}` 或 `{password}`；无 hash 首次视为"登录即注册/认领"，scrypt(N=16384,r=8,p=1,64B) 落 `AUTH_STORE_FILE`；错密码 401 `INVALID_CREDENTIALS`，`timingSafeEqual` 防时序 | 规格 §3.3 补桌面密码流；改密/重置流程与密码强度策略需另行拍板（当前 UI 前端最小 6 位） |
-| G13 ⭐ | routes/llm.ts、providers/factory.ts | BYOK：用户在设置里自带 LLM key 时，网关如何按请求覆盖默认 provider 未定义 | 请求 header `x-petsona-user-llm-key` 有值 → `createProvider(tier, {apiKeyOverride})` 走一次性 provider（**不缓存**，防跨请求泄漏）；仅 `LLM_PROVIDER=openai` 档支持 | 规格 §3.2 收录 BYOK header 名 + 覆盖语义；后续放开 Anthropic 时同法扩展 |
+| G13 ⭐ | routes/llm.ts、providers/factory.ts | BYOK：用户在设置里自带 LLM key 时，网关如何按请求覆盖默认 provider 未定义 | 请求 header `x-petsona-user-llm-key` 有值 → `createProvider(tier, {apiKeyOverride, providerOverride, baseUrlOverride, modelOverride})` 走一次性 OpenAI-compatible provider（**不缓存**，防跨请求泄漏）；`deepseek` / `openrouter` / `openai-compatible` 先作为兼容端点预设 | 规格 §3.2 收录 BYOK header 名 + 覆盖语义；后续放开 Anthropic 时同法扩展 |
 | G14 | routes/llm.ts | reasoning 帧 `recordUsage` 是否触发未定 | 不 recordUsage（DeepSeek 上游 usage.completion_tokens 已含 reasoning+content，末帧 done 单独统计避免双记） | 规格 §3.2 补：reasoning 帧只走展示，不进计费/预算通路 |
 | G15 | auth/store.ts | `AUTH_STORE_FILE` 现在同时承担 refresh 白名单 + `passwordHash` 落盘；文件格式演进未定义 | `{users, refresh}` 数组元组 JSON，密码 hash 属 `User.passwordHash?`（老文件字段可空，兼容） | 规格 §3.3 收录：定文件 schema + 迁移路径（后续换 SQLite/Postgres 时按同 schema 迁） |
 

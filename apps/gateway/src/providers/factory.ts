@@ -1,7 +1,7 @@
 // createProvider（v2.1 §2.1.1：name 从 env 读，源码不 hardcode 选型）
 // 规则：LLM_PROVIDER=mock|openai|anthropic + tier 选档；缺省/缺 key 一律回落 mock 并 console.warn。
 
-import type { LlmTier } from '@petsona/shared'
+import type { LlmProviderId, LlmTier } from '@petsona/shared'
 import { envStr } from '../env.js'
 import type { LLMProvider } from './provider.js'
 import { MockLLMProvider } from './mock.js'
@@ -17,6 +17,7 @@ export type CreateProviderOpts = {
   apiKeyOverride?: string
   baseUrlOverride?: string
   modelOverride?: string
+  providerOverride?: LlmProviderId | string
 }
 
 export function createProvider(tier: LlmTier, opts?: CreateProviderOpts): LLMProvider {
@@ -25,11 +26,13 @@ export function createProvider(tier: LlmTier, opts?: CreateProviderOpts): LLMPro
   // 不受网关默认 mock/openai/anthropic 开关影响，避免设置成功但聊天仍走 mock 或 env 模型。
   if (opts?.apiKeyOverride) {
     const p = tier === 'cheap' && process.env.LLM_CHEAP_API_KEY ? 'LLM_CHEAP' : 'LLM_MAIN'
+    const provider = normalizeByokProvider(opts.providerOverride)
+    const defaults = byokDefaults(provider)
     return new OpenAICompatProvider({
-      baseUrl: opts.baseUrlOverride ?? envStr(`${p}_BASE_URL`, 'https://api.deepseek.com/v1'),
+      baseUrl: opts.baseUrlOverride ?? envStr(`${p}_BASE_URL`, defaults.baseUrl),
       apiKey: opts.apiKeyOverride,
-      model: opts.modelOverride ?? envStr(`${p}_MODEL`, ''),
-      label: `${p}(${tier}, BYOK)`,
+      model: opts.modelOverride ?? envStr(`${p}_MODEL`, defaults.model),
+      label: `${p}(${tier}, BYOK:${provider})`,
     })
   }
   const key = cacheKey(name, tier)
@@ -89,6 +92,23 @@ function cacheKey(name: string, tier: LlmTier): string {
   if (name === 'mock') return 'mock'
   // 把关键 env 掺进 key：测试中途改 env（如换 key）能拿到新实例
   return [name, tier, process.env.LLM_MAIN_API_KEY, process.env.LLM_CHEAP_API_KEY, process.env.ANTHROPIC_API_KEY].join('|')
+}
+
+function normalizeByokProvider(provider?: string): LlmProviderId {
+  if (provider === 'openrouter' || provider === 'openai-compatible') return provider
+  return 'deepseek'
+}
+
+function byokDefaults(provider: LlmProviderId): { baseUrl: string; model: string } {
+  switch (provider) {
+    case 'openrouter':
+      return { baseUrl: 'https://openrouter.ai/api/v1', model: '' }
+    case 'openai-compatible':
+      return { baseUrl: 'https://api.openai.com/v1', model: '' }
+    case 'deepseek':
+    default:
+      return { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' }
+  }
 }
 
 export function resetProviderCache(): void {

@@ -43,6 +43,7 @@ export class GatewayClient {
   setBaseUrl(url: string): void { this.baseUrl = url }
   setLlmDebugConfig(config: Config['llmDebug']): void {
     this.llmDebug = {
+      provider: config.provider,
       baseUrl: config.baseUrl.trim().replace(/\/$/, ''),
       model: normalizeModel(config.model),
     }
@@ -131,6 +132,7 @@ export class GatewayClient {
     // BYOK header：只在 chat 请求带（headers() 通用；其它端点带上 gateway 也会忽略，无副作用）
     if (this.userLlmApiKey) {
       h['x-petsona-user-llm-key'] = this.userLlmApiKey
+      if (this.llmDebug?.provider) h['x-petsona-llm-provider'] = this.llmDebug.provider
       if (this.llmDebug?.baseUrl) h['x-petsona-llm-base-url'] = this.llmDebug.baseUrl
       if (this.llmDebug?.model) h['x-petsona-llm-model'] = this.llmDebug.model
     }

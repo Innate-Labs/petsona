@@ -20,6 +20,7 @@ export type ChatMsg = {
   key: string
   role: 'user' | 'pet'
   text: string
+  t?: number
   streaming?: boolean
   error?: boolean
   tooling?: string
@@ -49,7 +50,7 @@ export function useChat() {
   useEffect(() => {
     const histReq: ChatHistoryGetPayload = { limit: 50 }
     void request<ChatHistoryGetRes>(IPC.CHAT_HISTORY_GET, histReq)
-      .then((res) => setMsgs(res.turns.map((t) => ({ key: `hist:${t.id}`, role: t.role, text: t.text }))))
+      .then((res) => setMsgs(res.turns.map((t) => ({ key: `hist:${t.id}`, role: t.role, text: t.text, t: t.t }))))
       .catch(() => {
         // 历史拉不到不阻塞聊天
       })
@@ -82,14 +83,15 @@ export function useChat() {
   const sendText = (raw: string): boolean => {
     const text = raw.trim()
     if (!text) return false
+    const createdAt = Date.now()
     // 用户消息 + 立即挂宠物占位（reasoning=true → 触发「宠物名 正在来的路上…」loading）
     // 为什么不等 CHAT_SEND res：res 至少要 IPC 往返（10-100ms），而首帧上游返回要 500ms+，
     // 用户敲完回车立刻要有回应；等 res 回来只是拿真 turnId 再 rekey 占位。
     const tempPetKey = `pet-pending:${Date.now()}`
     setMsgs((prev) => [
       ...prev,
-      { key: `user:${Date.now()}:${prev.length}`, role: 'user', text },
-      { key: tempPetKey, role: 'pet', text: '', reasoning: true, streaming: true },
+      { key: `user:${createdAt}:${prev.length}`, role: 'user', text, t: createdAt },
+      { key: tempPetKey, role: 'pet', text: '', t: createdAt, reasoning: true, streaming: true },
     ])
     track(TRACK.对话_发起, {})
     const payload: ChatSendPayload = { text }
@@ -101,7 +103,7 @@ export function useChat() {
           const petKey = turnKey(res.turnId)
           const hasReal = prev.some((m) => m.key === petKey)
           if (hasReal) return prev.filter((m) => m.key !== tempPetKey)
-          return prev.map((m) => m.key === tempPetKey ? { ...m, key: petKey } : m)
+          return prev.map((m) => m.key === tempPetKey ? { ...m, key: petKey, t: Date.now() } : m)
         })
       })
       .catch((e: unknown) => {

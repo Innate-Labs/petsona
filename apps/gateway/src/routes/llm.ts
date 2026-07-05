@@ -69,6 +69,7 @@ export function registerLlmRoutes(app: FastifyInstance): void {
   app.post('/v1/llm/chat', async (req, reply) => {
     const userKey = req.headers['x-petsona-user-llm-key']
     const apiKeyOverride = typeof userKey === 'string' && userKey.length > 0 ? userKey : undefined
+    const userProvider = req.headers['x-petsona-llm-provider']
     const userBaseUrl = req.headers['x-petsona-llm-base-url']
     const userModel = req.headers['x-petsona-llm-model']
 
@@ -113,6 +114,7 @@ export function registerLlmRoutes(app: FastifyInstance): void {
     const provider = createProvider(body.tier, apiKeyOverride
       ? {
           apiKeyOverride,
+          providerOverride: typeof userProvider === 'string' && userProvider.trim() ? userProvider.trim() : undefined,
           baseUrlOverride: typeof userBaseUrl === 'string' && userBaseUrl.trim() ? userBaseUrl.trim() : undefined,
           modelOverride: typeof userModel === 'string' && userModel.trim() ? userModel.trim() : undefined,
         }

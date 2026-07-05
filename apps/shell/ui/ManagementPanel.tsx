@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { DEFAULT_CONFIG, IPC, type Config, type PetBehaviorFrequency, type ProactiveFrequency } from '@petsona/shared';
+import { DEFAULT_CONFIG, IPC, type Config, type LlmProviderId, type PetBehaviorFrequency, type ProactiveFrequency } from '@petsona/shared';
 import {
   HOME_SHORTCUTS,
   OWNER_MOODS,
   type HistoryConversation,
-  type PanelMessage,
   type PanelTab,
   createDefaultPanelState,
   getConversationTitle
@@ -33,6 +32,8 @@ import { Reminders } from './Reminders';
 import { ModalHost } from './ModalKit';
 import iconDelete from './assets/figma/icon-delete-28.svg';
 import { isTauri, on, request } from './lib/ipc';
+import { useChat } from './lib/useChat';
+import type { ChatMsg } from './lib/useChat';
 
 const CHAT_INPUT_PLACEHOLDER = '聊聊拯救地球の事';
 const SHOW_HOME_REMINDERS = false;
@@ -55,6 +56,11 @@ const PROACTIVE_OPTIONS: Array<{ value: ProactiveFrequency; label: string; hint:
   { value: 'mid', label: '正常', hint: '正常：约 45 分钟一次' },
   { value: 'low', label: '安静', hint: '安静：约 2 小时一次' },
   { value: 'off', label: '关闭', hint: '关闭：不主动闲聊' }
+];
+const LLM_PROVIDER_OPTIONS: Array<{ value: LlmProviderId; label: string; baseUrl: string; model: string }> = [
+  { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' },
+  { value: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: '' },
+  { value: 'openai-compatible', label: 'OpenAI Compatible', baseUrl: 'https://api.openai.com/v1', model: '' }
 ];
 
 function panelTabFromHash(): PanelTab {
@@ -84,19 +90,18 @@ function panelTabFromHash(): PanelTab {
 }
 
 export function ManagementPanel() {
-  const [state, setState] = useState(createDefaultPanelState);
+  const [state] = useState(createDefaultPanelState);
   const [petData, setPetData] = useState<PetDataState>(() => loadPetDataState(typeof window === 'undefined' ? null : window.localStorage));
   const [ownerMood, setOwnerMood] = useState<(typeof OWNER_MOODS)[number]>(state.pet.ownerMood);
   const [activeTab, setActiveTab] = useState<PanelTab>(panelTabFromHash);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<PanelMessage[]>([]);
+  const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => new Set());
   const [inputValue, setInputValue] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [remindersExpanded, setRemindersExpanded] = useState(false);
-  const messagesRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const hasConversation = messages.length > 0;
-  const currentTitle = hasConversation ? getConversationTitle(messages.find((message) => message.speaker === 'user')?.text ?? '') : '新聊天';
+  const { msgs, listRef, sendText } = useChat()
+  const hasConversation = msgs.length > 0;
+  const currentTitle = hasConversation ? getConversationTitle(msgs.find((message) => message.role === 'user')?.text ?? '') : '新聊天';
   const companionDays = calculateCompanionDays(petData.firstCompanionDate);
   const ageLabel = calculatePetAgeLabel(petData.profile.birthday);
   const sidebarPet = {
@@ -112,11 +117,6 @@ export function ManagementPanel() {
     value: state.stats[item.valueKey]
   }));
   const visibleReminders = UPCOMING_REMINDERS.slice(0, 1);
-
-  useEffect(() => {
-    if (!messagesRef.current) return;
-    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-  }, [messages]);
 
   useEffect(() => {
     const updateActiveTabFromHash = () => setActiveTab(panelTabFromHash());
@@ -135,14 +135,16 @@ export function ManagementPanel() {
   }, [petData]);
 
   const groupedHistory = useMemo(() => {
-    return state.history.reduce<Record<HistoryConversation['group'], HistoryConversation[]>>(
+    return turnsToHistoryConversations(msgs)
+      .filter((item) => !hiddenHistoryIds.has(item.id))
+      .reduce<Record<HistoryConversation['group'], HistoryConversation[]>>(
       (groups, item) => {
         groups[item.group].push(item);
         return groups;
       },
       { 今天: [], 昨天: [], 本周: [], 本月: [], 更早: [] }
     );
-  }, [state.history]);
+  }, [hiddenHistoryIds, msgs]);
 
   const chooseShortcut = (prompt: string) => {
     setInputValue(prompt);
@@ -150,47 +152,27 @@ export function ManagementPanel() {
   };
 
   const startNewConversation = () => {
-    setCurrentConversationId(null);
-    setMessages([]);
     setInputValue('');
     setActiveTab('home');
     window.requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const openConversation = (conversation: HistoryConversation) => {
-    setCurrentConversationId(conversation.id);
-    setMessages(conversation.messages);
     setActiveTab('home');
+    window.requestAnimationFrame(() => {
+      const firstMessage = conversation.messages[0]?.key
+        ? document.querySelector(`[data-message-key="${conversation.messages[0].key}"]`)
+        : null;
+      firstMessage?.scrollIntoView({ block: 'center' });
+    });
   };
 
   const deleteConversation = (conversationId: string) => {
-    setState((current) => ({
-      ...current,
-      history: current.history.filter((conversation) => conversation.id !== conversationId)
-    }));
-
-    if (currentConversationId === conversationId) {
-      setCurrentConversationId(null);
-      setMessages([]);
-      setInputValue('');
-      setActiveTab('home');
-    }
+    setHiddenHistoryIds((current) => new Set([...current, conversationId]));
   };
 
   const sendMessage = () => {
-    const text = inputValue.trim();
-    if (!text) return;
-
-    setMessages((current) => [
-      ...current,
-      {
-        id: Date.now(),
-        speaker: 'user',
-        text
-      }
-    ]);
-    setInputValue('');
-    setCurrentConversationId((current) => current ?? `local-${Date.now()}`);
+    if (sendText(inputValue)) setInputValue('');
   };
 
   return (
@@ -253,10 +235,10 @@ export function ManagementPanel() {
             历史对话
           </button>
           <div className="panel-history-list" aria-label="最近历史对话">
-            {state.history.map((conversation) => (
+            {Object.values(groupedHistory).flat().slice(0, 6).map((conversation) => (
               <div className="panel-history-row" key={conversation.id}>
                 <button
-                  className={currentConversationId === conversation.id ? 'panel-history-open active' : 'panel-history-open'}
+                  className="panel-history-open"
                   type="button"
                   onClick={() => openConversation(conversation)}
                 >
@@ -301,13 +283,20 @@ export function ManagementPanel() {
               </button>
             </header>
 
-            <div className="panel-chat-body" ref={messagesRef}>
+            <div className="panel-chat-body" ref={listRef}>
               {hasConversation ? (
                 <div className="panel-message-stack">
-                  {messages.map((message) => (
-                    <article className={`panel-message ${message.speaker}`} key={message.id}>
-                      {message.text}
-                    </article>
+                  {msgs.map((message) => (
+                    <div className="panel-message-wrap" data-message-key={message.key} key={message.key}>
+                      {message.reasoning && !message.text ? <div className="panel-reasoning">{petData.profile.nickname} 正在来的路上…</div> : null}
+                      {(message.text || !message.reasoning) ? (
+                        <article className={`panel-message ${message.role === 'user' ? 'user' : 'pet'}${message.error ? ' error' : ''}`}>
+                          {message.text}
+                          {message.streaming ? <span className="chat-cursor">▍</span> : null}
+                        </article>
+                      ) : null}
+                      {message.tooling ? <div className="panel-tooling">{message.tooling}</div> : null}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -471,6 +460,19 @@ function SettingsPage() {
     void saveConfigPatch({ proactive: nextConfig.proactive });
   };
 
+  const changeLlmProvider = (value: LlmProviderId) => {
+    const option = LLM_PROVIDER_OPTIONS.find((item) => item.value === value) ?? LLM_PROVIDER_OPTIONS[0];
+    const nextConfig = {
+      ...config,
+      llmDebug: {
+        provider: option.value,
+        baseUrl: option.baseUrl,
+        model: option.model
+      }
+    };
+    setConfig(nextConfig);
+  };
+
   const changePersonaText = (value: string) => {
     const nextValue = value.slice(0, PERSONA_PROMPT_MAX);
     setPersonaText(nextValue);
@@ -617,6 +619,16 @@ function SettingsPage() {
             <p>大模型 API 接口设置仅用于开发调试，不作为最终用户入口。</p>
           </div>
           <label className="settings-field">
+            <span>Provider</span>
+            <select value={config.llmDebug.provider} onChange={(event) => changeLlmProvider(event.target.value as LlmProviderId)}>
+              {LLM_PROVIDER_OPTIONS.map((option) => (
+                <option value={option.value} key={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="settings-field">
             <span>Base URL</span>
             <input value={config.llmDebug.baseUrl} onChange={(event) => setConfig({ ...config, llmDebug: { ...config.llmDebug, baseUrl: event.target.value } })} />
           </label>
@@ -700,6 +712,47 @@ function normalizeSettingsConfig(config: Config): Config {
     llmDebug: { ...DEFAULT_CONFIG.llmDebug, ...(config.llmDebug ?? {}) },
     proactive: { ...DEFAULT_CONFIG.proactive, ...(config.proactive ?? {}) }
   };
+}
+
+function turnsToHistoryConversations(msgs: ChatMsg[]): HistoryConversation[] {
+  const conversations: HistoryConversation[] = [];
+  for (let index = 0; index < msgs.length; index += 1) {
+    const message = msgs[index];
+    if (!message || message.role !== 'user') continue;
+    const reply = msgs[index + 1]?.role === 'pet' ? msgs[index + 1] : undefined;
+    const t = message.t ?? reply?.t ?? Date.now();
+    conversations.unshift({
+      id: `turn-${message.key}`,
+      title: getConversationTitle(message.text),
+      timeLabel: formatHistoryTime(t),
+      group: classifyHistoryGroup(t),
+      messages: reply ? [message, reply] : [message]
+    });
+  }
+  return conversations;
+}
+
+function classifyHistoryGroup(t: number): HistoryConversation['group'] {
+  const now = new Date();
+  const date = new Date(t);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.floor((todayStart - targetStart) / 86_400_000);
+  if (diffDays <= 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 7) return '本周';
+  if (now.getFullYear() === date.getFullYear() && now.getMonth() === date.getMonth()) return '本月';
+  return '更早';
+}
+
+function formatHistoryTime(t: number): string {
+  const date = new Date(t);
+  const group = classifyHistoryGroup(t);
+  if (group === '今天') {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+  if (group === '昨天') return '昨天';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function StatusCard({ label, value }: { label: string; value: number }) {

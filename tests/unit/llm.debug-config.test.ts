@@ -75,6 +75,7 @@ describe('LLM debug configuration runtime wiring', () => {
     })
 
     expect(capturedHeaders.get('x-petsona-user-llm-key')).toBe('sk-test-1234')
+    expect(capturedHeaders.get('x-petsona-llm-provider')).toBe('deepseek')
     expect(capturedHeaders.get('x-petsona-llm-base-url')).toBe('https://api.deepseek.com/v1')
     expect(capturedHeaders.get('x-petsona-llm-model')).toBe('deepseek-v4-flash')
 
