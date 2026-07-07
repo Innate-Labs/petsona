@@ -51,26 +51,46 @@ export function turnsToHistoryConversations(msgs: ChatMsg[]): HistoryConversatio
   const sessions: HistoryConversation[] = [];
   let current: HistoryConversation | null = null;
   let currentLastTime = 0;
+  const byConversationId = new Map<string, HistoryConversation>();
 
   for (let index = 0; index < msgs.length; index += 1) {
     const message = msgs[index];
     if (!message) continue;
     const t = message.t ?? (currentLastTime || Date.now());
-    const shouldStartSession =
-      !current ||
-      (message.role === 'user' && current.messages.length > 0 && t - currentLastTime > CHAT_HISTORY_SESSION_GAP_MS);
-
-    if (shouldStartSession) {
-      current = {
-        id: `session-${message.key}`,
-        title: getConversationTitle(message.text),
+    if (message.conversationId) {
+      const existing = byConversationId.get(message.conversationId);
+      current = existing ?? {
+        id: message.conversationId,
+        title: getConversationTitle(message.role === 'user' ? message.text : ''),
         timeLabel: formatHistoryTime(t),
         group: classifyHistoryGroup(t),
         messages: []
       };
-      sessions.push(current);
+      if (!existing) {
+        byConversationId.set(message.conversationId, current);
+        sessions.push(current);
+      }
+    } else {
+      const shouldStartSession =
+      !current ||
+      (message.role === 'user' && current.messages.length > 0 && t - currentLastTime > CHAT_HISTORY_SESSION_GAP_MS);
+
+      if (shouldStartSession) {
+        current = {
+          id: `session-${message.key}`,
+          title: getConversationTitle(message.text),
+          timeLabel: formatHistoryTime(t),
+          group: classifyHistoryGroup(t),
+          messages: []
+        };
+        sessions.push(current);
+      }
     }
 
+    if (!current) continue;
+    if ((!current.title || current.title === 'Hi 主人') && message.role === 'user') {
+      current.title = getConversationTitle(message.text);
+    }
     current.messages.push(message);
     currentLastTime = Math.max(currentLastTime, t);
     current.timeLabel = formatHistoryTime(currentLastTime);

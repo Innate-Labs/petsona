@@ -1,11 +1,12 @@
 // hot/warm 层存储（memory/sessions.db，DDL 见 v3.0 §2.3）
 
 import Database from 'better-sqlite3'
-import type { Turn, WarmItem } from '@petsona/shared'
+import type { ChatConversationSummary, Turn, WarmItem } from '@petsona/shared'
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS turns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL DEFAULT 'default',
   role TEXT NOT NULL CHECK(role IN ('user','pet')),
   text TEXT NOT NULL,
   t INTEGER NOT NULL,
@@ -20,11 +21,11 @@ CREATE TABLE IF NOT EXISTS warm_segments (
 );
 `
 
-type TurnRow = { id: number; role: 'user' | 'pet'; text: string; t: number; topics: string }
+type TurnRow = { id: number; conversation_id?: string; role: 'user' | 'pet'; text: string; t: number; topics: string }
 type WarmRow = { id: number; turn_start: number; turn_end: number; summary: string; topics: string; t: number }
 
 function rowToTurn(r: TurnRow): Turn {
-  return { id: r.id, role: r.role, text: r.text, t: r.t, topics: safeTopics(r.topics) }
+  return { id: r.id, conversationId: r.conversation_id ?? 'default', role: r.role, text: r.text, t: r.t, topics: safeTopics(r.topics) }
 }
 function rowToWarm(r: WarmRow): WarmItem {
   return { id: r.id, turnStart: r.turn_start, turnEnd: r.turn_end, summary: r.summary, topics: safeTopics(r.topics), t: r.t }
@@ -45,14 +46,18 @@ export class SessionsDb {
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
     this.db.exec(DDL)
+    this.migrate()
   }
 
   close(): void { this.db.close() }
 
   // ---------- hot ----------
 
-  insertTurn(role: 'user' | 'pet', text: string, t: number): number {
-    const r = this.db.prepare('INSERT INTO turns (role, text, t) VALUES (?, ?, ?)').run(role, text, t)
+  insertTurn(role: 'user' | 'pet', text: string, t: number, opts: { conversationId?: string } = {}): number {
+    const conversationId = normalizeConversationId(opts.conversationId)
+    const r = this.db
+      .prepare('INSERT INTO turns (conversation_id, role, text, t) VALUES (?, ?, ?, ?)')
+      .run(conversationId, role, text, t)
     return Number(r.lastInsertRowid)
   }
 
@@ -67,6 +72,45 @@ export class SessionsDb {
   recentTurns(limit: number): Turn[] {
     const rows = this.db.prepare('SELECT * FROM turns ORDER BY id DESC LIMIT ?').all(limit) as TurnRow[]
     return rows.reverse().map(rowToTurn)
+  }
+
+  recentTurnsByConversation(conversationId: string, limit: number): Turn[] {
+    const rows = this.db
+      .prepare('SELECT * FROM turns WHERE conversation_id = ? ORDER BY id DESC LIMIT ?')
+      .all(normalizeConversationId(conversationId), limit) as TurnRow[]
+    return rows.reverse().map(rowToTurn)
+  }
+
+  recentConversations(limit: number): ChatConversationSummary[] {
+    const rows = this.db
+      .prepare(`
+        SELECT
+          conversation_id AS id,
+          MIN(t) AS t,
+          MAX(t) AS updatedAt,
+          COUNT(*) AS messageCount,
+          COALESCE(
+            (SELECT text FROM turns first_user
+             WHERE first_user.conversation_id = turns.conversation_id AND first_user.role = 'user'
+             ORDER BY first_user.id ASC LIMIT 1),
+            (SELECT text FROM turns first_turn
+             WHERE first_turn.conversation_id = turns.conversation_id
+             ORDER BY first_turn.id ASC LIMIT 1),
+            '新聊天'
+          ) AS title
+        FROM turns
+        GROUP BY conversation_id
+        ORDER BY updatedAt DESC
+        LIMIT ?
+      `)
+      .all(limit) as Array<{ id: string; title: string; t: number; updatedAt: number; messageCount: number }>
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      t: row.t,
+      updatedAt: row.updatedAt,
+      messageCount: row.messageCount,
+    }))
   }
 
   oldestTurns(limit: number): Turn[] {
@@ -92,6 +136,13 @@ export class SessionsDb {
 
   allTurns(): Turn[] {
     return (this.db.prepare('SELECT * FROM turns ORDER BY id ASC').all() as TurnRow[]).map(rowToTurn)
+  }
+
+  private migrate(): void {
+    const cols = this.db.prepare('PRAGMA table_info(turns)').all() as Array<{ name: string }>
+    if (!cols.some((col) => col.name === 'conversation_id')) {
+      this.db.exec("ALTER TABLE turns ADD COLUMN conversation_id TEXT NOT NULL DEFAULT 'default'")
+    }
   }
 
   // ---------- warm ----------
@@ -130,4 +181,9 @@ export class SessionsDb {
     if (!ids.length) return
     this.db.prepare(`DELETE FROM warm_segments WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids)
   }
+}
+
+function normalizeConversationId(id: string | undefined): string {
+  const trimmed = id?.trim()
+  return trimmed || 'default'
 }

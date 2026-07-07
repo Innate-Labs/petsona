@@ -2,7 +2,8 @@
 // 装配所有子系统 + 注册 §3.1 全消息表（M1 Gate ④：未用到的返回占位）
 
 import { createInterface } from 'node:readline'
-import type { Emotion, Envelope, FileOp, StagingPlan, TaskResult } from '@petsona/shared'
+import { randomUUID } from 'node:crypto'
+import type { ChatHistoryGetPayload, ChatSendPayload, Emotion, Envelope, FileOp, StagingPlan, TaskResult } from '@petsona/shared'
 import { IPC, TRACK } from '@petsona/shared'
 import { decodeLine, encodeLine, makeEvent } from './ipc/envelope.js'
 import { Router, IpcError } from './ipc/router.js'
@@ -42,6 +43,7 @@ import { StagingStore } from './staging/store.js'
 import { join } from 'node:path'
 
 const startedAt = Date.now()
+const PROACTIVE_CONVERSATION_ID = '__proactive__'
 
 export function createHarness(emitLine: (line: string) => void) {
   const emit = (e: { type: string; payload: unknown }) => {
@@ -195,7 +197,7 @@ export function createHarness(emitLine: (line: string) => void) {
     isDuplicate: (text, recent) => isSimilarToRecent(gateway, text, recent),
     emitProactive: (text) => {
       // 主动气泡落 hot 轮次：下一轮对话模型知道自己刚主动说过什么（SPEC-GAP: 规格未写，取上下文连续性默认）
-      db.insertTurn('pet', text, Date.now())
+      db.insertTurn('pet', text, Date.now(), { conversationId: PROACTIVE_CONVERSATION_ID })
       emit({ type: IPC.PET_BUBBLE, payload: { text, durationMs: 8000, kind: 'proactive' } })
       tracker.track(TRACK.主动气泡_展示, { chars: text.length })
     },
@@ -210,13 +212,24 @@ export function createHarness(emitLine: (line: string) => void) {
   router.onReq(IPC.PING, async () => ({ ok: true, uptimeSec: Math.floor((Date.now() - startedAt) / 1000) }))
 
   // 对话类
-  router.onReq(IPC.CHAT_SEND, async (p: { text: string }) => {
-    if (typeof p?.text !== 'string' || !p.text.trim()) throw new IpcError('BAD_REQUEST', 'text 必填')
-    return loop.handleChatSend(p.text)
+  let currentConversationId = 'default'
+  router.onReq(IPC.CHAT_CONVERSATION_START, async (p: { conversationId?: string }) => {
+    currentConversationId = p?.conversationId?.trim() || `conv_${randomUUID().slice(0, 8)}`
+    return { conversationId: currentConversationId }
   })
-  router.onReq(IPC.CHAT_HISTORY_GET, async (p: { limit?: number }) => ({
-    turns: db.recentTurns(Math.min(p?.limit ?? 50, 200)),
-  }))
+  router.onReq(IPC.CHAT_SEND, async (p: ChatSendPayload) => {
+    if (typeof p?.text !== 'string' || !p.text.trim()) throw new IpcError('BAD_REQUEST', 'text 必填')
+    currentConversationId = p.conversationId?.trim() || currentConversationId
+    return loop.handleChatSend(p.text, { conversationId: currentConversationId })
+  })
+  router.onReq(IPC.CHAT_HISTORY_GET, async (p: ChatHistoryGetPayload) => {
+    const limit = Math.min(p?.limit ?? 50, 200)
+    const conversationId = p?.conversationId?.trim()
+    return {
+      turns: conversationId ? db.recentTurnsByConversation(conversationId, limit) : db.recentTurns(limit),
+      conversations: p?.includeConversations ? db.recentConversations(100) : undefined,
+    }
+  })
 
   // 宠物状态类
   router.onReq(IPC.BUBBLE_ACTION, async () => ({ placeholder: true, note: 'M2 实现（审批气泡回传）' }))

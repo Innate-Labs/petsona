@@ -95,13 +95,12 @@ export function ManagementPanel() {
   const [ownerMood, setOwnerMood] = useState<(typeof OWNER_MOODS)[number]>(state.pet.ownerMood);
   const [activeTab, setActiveTab] = useState<PanelTab>(panelTabFromHash);
   const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => new Set());
-  const [chatStartIndex, setChatStartIndex] = useState<number | null>(null)
   const [inputValue, setInputValue] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const { msgs, listRef, sendText } = useChat()
-  const visibleMsgs = chatStartIndex === null ? msgs : msgs.slice(chatStartIndex)
+  const { msgs, listRef, sendText, startConversation, openConversation: openChatConversation } = useChat()
+  const visibleMsgs = msgs
   const hasConversation = visibleMsgs.length > 0;
   const currentTitle = hasConversation ? getConversationTitle(visibleMsgs.find((message) => message.role === 'user')?.text ?? '') : '新聊天';
   const companionDays = calculateCompanionDays(petData.firstCompanionDate);
@@ -154,14 +153,14 @@ export function ManagementPanel() {
   };
 
   const startNewConversation = () => {
-    setChatStartIndex(msgs.length)
+    void startConversation()
     setInputValue('');
     setActiveTab('home');
     window.requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const openConversation = (conversation: HistoryConversation) => {
-    setChatStartIndex(null)
+    openChatConversation(conversation.id, conversation.messages)
     setActiveTab('home');
     window.requestAnimationFrame(() => {
       const firstMessage = conversation.messages[0]?.key

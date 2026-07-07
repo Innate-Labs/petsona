@@ -54,4 +54,20 @@ describe('Gate ①：登录 → 流式聊天', () => {
     expect(turns.some((t: any) => t.role === 'user' && t.text === '你好呀')).toBe(true)
     expect(turns.some((t: any) => t.role === 'pet')).toBe(true)
   })
+
+  it('新对话上下文按 conversationId 隔离', async () => {
+    const first = await h.request('CHAT_SEND', { text: '旧上下文只属于 A', conversationId: 'conv-e2e-a' })
+    await h.waitFor((e) => e.type === 'CHAT_DONE' && e.payload?.turnId === first.turnId, 15_000)
+
+    const second = await h.request('CHAT_SEND', { text: '新上下文只属于 B', conversationId: 'conv-e2e-b' })
+    expect(second.conversationId).toBe('conv-e2e-b')
+    await h.waitFor((e) => e.type === 'CHAT_DONE' && e.payload?.turnId === second.turnId, 15_000)
+
+    const a = await h.request('CHAT_HISTORY_GET', { limit: 20, conversationId: 'conv-e2e-a' })
+    const b = await h.request('CHAT_HISTORY_GET', { limit: 20, conversationId: 'conv-e2e-b' })
+    expect(a.turns.some((t: any) => t.text.includes('旧上下文只属于 A'))).toBe(true)
+    expect(a.turns.some((t: any) => t.text.includes('新上下文只属于 B'))).toBe(false)
+    expect(b.turns.some((t: any) => t.text.includes('新上下文只属于 B'))).toBe(true)
+    expect(b.turns.some((t: any) => t.text.includes('旧上下文只属于 A'))).toBe(false)
+  })
 })

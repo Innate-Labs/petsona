@@ -2,7 +2,7 @@
 
 import type { TaskEvent, TaskRecord } from './task.js'
 import type { StagingPlan } from './staging.js'
-import type { ColdItem, ColdItemMeta, ColdType, Turn } from './memory.js'
+import type { ChatConversationSummary, ColdItem, ColdItemMeta, ColdType, Turn } from './memory.js'
 import type { Config } from './config.js'
 
 // ---------- §3.0 消息 Envelope（IPC 唯一封装） ----------
@@ -35,6 +35,7 @@ export type LoginState = 'anon' | 'logged_in'
 
 export const IPC = {
   // 对话类
+  CHAT_CONVERSATION_START: 'CHAT_CONVERSATION_START',
   CHAT_SEND: 'CHAT_SEND',
   CHAT_CHUNK: 'CHAT_CHUNK',
   // SPEC-GAP: reasoning 模型（DeepSeek R1/v4-flash）思考流独立走 CHAT_REASONING，
@@ -94,14 +95,17 @@ export type IpcType = (typeof IPC)[keyof typeof IPC]
 // ---------- 各消息 payload ----------
 
 // 对话类
-export type ChatSendPayload = { text: string }
-export type ChatChunkPayload = { turnId: string; delta: string }
-export type ChatReasoningPayload = { turnId: string; delta: string }
-export type ChatToolingPayload = { turnId: string; tool: string; note: string }
-export type ChatDonePayload = { turnId: string; reply: string; bubble: string }  // bubble ≤18 字
-export type ChatErrorPayload = { turnId: string; code: ErrCode; petLine: string }
-export type ChatHistoryGetPayload = { limit: number }
-export type ChatHistoryGetRes = { turns: Turn[] }
+export type ChatConversationStartPayload = { conversationId?: string }
+export type ChatConversationStartRes = { conversationId: string }
+export type ChatSendPayload = { text: string; conversationId?: string }
+export type ChatSendRes = { turnId: string; conversationId: string }
+export type ChatChunkPayload = { turnId: string; conversationId?: string; delta: string }
+export type ChatReasoningPayload = { turnId: string; conversationId?: string; delta: string }
+export type ChatToolingPayload = { turnId: string; conversationId?: string; tool: string; note: string }
+export type ChatDonePayload = { turnId: string; conversationId?: string; reply: string; bubble: string }  // bubble ≤18 字
+export type ChatErrorPayload = { turnId: string; conversationId?: string; code: ErrCode; petLine: string }
+export type ChatHistoryGetPayload = { limit: number; conversationId?: string; includeConversations?: boolean }
+export type ChatHistoryGetRes = { turns: Turn[]; conversations?: ChatConversationSummary[] }
 
 // 宠物状态类
 export type PetBubblePayload = {

@@ -42,23 +42,24 @@ export class CompanionLoop {
     return this.busy
   }
 
-  async handleChatSend(text: string): Promise<{ turnId: string }> {
+  async handleChatSend(text: string, opts: { conversationId?: string } = {}): Promise<{ turnId: string; conversationId: string }> {
     const turnId = `turn_${randomUUID().slice(0, 8)}`
+    const conversationId = opts.conversationId?.trim() || 'default'
     // 不阻塞 res：异步跑整轮，事件流推进 UI
-    void this.runTurn(turnId, text).catch((err) => {
+    void this.runTurn(turnId, conversationId, text).catch((err) => {
       this.deps.emit({
         type: IPC.CHAT_ERROR,
-        payload: { turnId, code: 'UPSTREAM', petLine: this.deps.pool.pick('generic_error') },
+        payload: { turnId, conversationId, code: 'UPSTREAM', petLine: this.deps.pool.pick('generic_error') },
       })
       console.error('[companion] turn 失败:', err)
     })
-    return { turnId }
+    return { turnId, conversationId }
   }
 
-  private async runTurn(turnId: string, rawText: string): Promise<void> {
+  private async runTurn(turnId: string, conversationId: string, rawText: string): Promise<void> {
     const { hooks, store, pool, tracker, emit } = this.deps
     if (this.busy) {
-      emit({ type: IPC.CHAT_ERROR, payload: { turnId, code: 'RATE_LIMIT', petLine: pool.pick('rate_limit') } })
+      emit({ type: IPC.CHAT_ERROR, payload: { turnId, conversationId, code: 'RATE_LIMIT', petLine: pool.pick('rate_limit') } })
       return
     }
     this.busy = true
@@ -68,25 +69,26 @@ export class CompanionLoop {
       const preCtx = { userText: rawText, source: 'panel' }
       const rejected = await hooks.runPreTurn(preCtx)
       if (rejected) {
-        emit({ type: IPC.CHAT_ERROR, payload: { turnId, code: rejected.reject, petLine: rejected.petLine } })
+        emit({ type: IPC.CHAT_ERROR, payload: { turnId, conversationId, code: rejected.reject, petLine: rejected.petLine } })
         return
       }
       const text = preCtx.userText
 
       // 落 user 轮次 + 异步打标（cheap 档，失败 _untagged）
-      const userTurnId = store.db.insertTurn('user', text, Date.now())
-      void store.tagTurn({ id: userTurnId, role: 'user', text, t: Date.now(), topics: [] })
+      const now = Date.now()
+      const userTurnId = store.db.insertTurn('user', text, now, { conversationId })
+      void store.tagTurn({ id: userTurnId, conversationId, role: 'user', text, t: now, topics: [] })
 
       // ---- 会话上下文（hot 在场部分） ----
       let messages: LlmMessage[] = store.db
-        .recentTurns(20)
+        .recentTurnsByConversation(conversationId, 20)
         .map((t) => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text }))
       if (messages.length === 0 || messages[messages.length - 1]!.content !== text) {
         messages.push({ role: 'user', content: text })
       }
 
       // ---- s08 压缩（assemble 之前；压缩前必先 extract——先记住，再遗忘） ----
-      const memory = store.assemble(this.triggers())
+      const memory = store.assemble(this.triggers(conversationId))
       const memBlock = renderMemory(memory)
       let compactCtx: CompactContext = {
         messages,
@@ -120,15 +122,16 @@ export class CompanionLoop {
 
       // ---- LLM 流式 + 轻工具循环 ----
       const tier = compactCtx.tierDowngraded ? 'cheap' : 'main'
-      const finalText = await this.streamWithTools(turnId, system, messages, tier)
+      const finalText = await this.streamWithTools(turnId, conversationId, system, messages, tier)
       if (finalText === null) return   // 错误已发 CHAT_ERROR
 
       // ---- PostLLM：persona_enforce → bubble_compress → fallback → track_end ----
       const draft = await hooks.runPostLLM({ text: finalText, loop: 'companion' })
 
       // 落 pet 轮次 + 打标 + 压缩触发 + turn 末提取
-      const petTurnId = store.db.insertTurn('pet', draft.text, Date.now())
-      void store.tagTurn({ id: petTurnId, role: 'pet', text: draft.text, t: Date.now(), topics: [] })
+      const petNow = Date.now()
+      const petTurnId = store.db.insertTurn('pet', draft.text, petNow, { conversationId })
+      void store.tagTurn({ id: petTurnId, conversationId, role: 'pet', text: draft.text, t: petNow, topics: [] })
       void store.compactIfNeeded()
       void store.extract([...messages, { role: 'assistant', content: draft.text }]).then((items) => {
         if (items.length) tracker.track(TRACK.记忆_提取, { n: items.length, types: items.map((i) => i.type) })
@@ -136,7 +139,7 @@ export class CompanionLoop {
 
       emit({
         type: IPC.CHAT_DONE,
-        payload: { turnId, reply: draft.text, bubble: draft.bubble ?? draft.text.slice(0, 18) },
+        payload: { turnId, conversationId, reply: draft.text, bubble: draft.bubble ?? draft.text.slice(0, 18) },
       })
     } finally {
       this.busy = false
@@ -145,7 +148,7 @@ export class CompanionLoop {
 
   /** 流式调用 + tool_use 执行循环；错误时发 CHAT_ERROR 并返回 null */
   private async streamWithTools(
-    turnId: string, system: string, messages: LlmMessage[], tier: 'main' | 'cheap',
+    turnId: string, conversationId: string, system: string, messages: LlmMessage[], tier: 'main' | 'cheap',
   ): Promise<string | null> {
     const { gateway, registry, hooks, pool, tracker, emit } = this.deps
     const convo = [...messages]
@@ -165,11 +168,11 @@ export class CompanionLoop {
         {
           onDelta: (t) => {
             roundText += t
-            emit({ type: IPC.CHAT_CHUNK, payload: { turnId, delta: t } })
+            emit({ type: IPC.CHAT_CHUNK, payload: { turnId, conversationId, delta: t } })
           },
           // reasoning 流不进 roundText 也不喂回模型（reasoning 块只用于展示，纯 UI 事件）
           onReasoning: (t) => {
-            emit({ type: IPC.CHAT_REASONING, payload: { turnId, delta: t } })
+            emit({ type: IPC.CHAT_REASONING, payload: { turnId, conversationId, delta: t } })
           },
           onToolUse: (tu) => toolUses.push(tu),
           onDone: (d) => { state.stopReason = d.stopReason },
@@ -177,7 +180,7 @@ export class CompanionLoop {
             state.errored = true
             tracker.track(TRACK.AI_失败, { code: e.code })
             tracker.track(TRACK.兜底_触发, { scene: e.code })
-            emit({ type: IPC.CHAT_ERROR, payload: { turnId, code: e.code, petLine: pool.forError(e.code) } })
+            emit({ type: IPC.CHAT_ERROR, payload: { turnId, conversationId, code: e.code, petLine: pool.forError(e.code) } })
           },
         },
       )
@@ -189,7 +192,7 @@ export class CompanionLoop {
       if (roundText) assistantBlocks.push({ type: 'text', text: roundText })
       const resultBlocks: LlmContentBlock[] = []
       for (const tu of toolUses) {
-        emit({ type: IPC.CHAT_TOOLING, payload: { turnId, tool: tu.name, note: pool.pick(tu.name) } })
+        emit({ type: IPC.CHAT_TOOLING, payload: { turnId, conversationId, tool: tu.name, note: pool.pick(tu.name) } })
         assistantBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input })
         resultBlocks.push(await this.execTool(tu))
       }
@@ -229,9 +232,9 @@ export class CompanionLoop {
   }
 
   /** 话题触发词：近几轮 topics 并集（tagTurn 异步补写，取已有标签） */
-  private triggers(): string[] {
+  private triggers(conversationId: string): string[] {
     const topics = new Set<string>()
-    for (const t of this.deps.store.db.recentTurns(6)) {
+    for (const t of this.deps.store.db.recentTurnsByConversation(conversationId, 6)) {
       for (const tp of t.topics) if (tp !== '_untagged') topics.add(tp)
     }
     return [...topics].slice(0, 5)

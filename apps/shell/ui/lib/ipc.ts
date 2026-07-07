@@ -150,19 +150,22 @@ function mockRespond(env: Envelope): void {
       mockRes(env, { ok: true, uptimeSec: Math.floor((Date.now() - mockStartAt) / 1000) })
       return
     case IPC.CHAT_SEND: {
-      const { text } = env.payload as ChatSendPayload
+      const { text, conversationId } = env.payload as ChatSendPayload
       const turnId = crypto.randomUUID()
       const reply = `（mock 回声）你刚才说：「${text}」。接上 harness 之后我就会真的思考啦。`
-      mockRes(env, { turnId })
-      mockEmit(IPC.CHAT_TOOLING, { turnId, tool: 'mock', note: '翻了翻小本本…' }, 150)
+      mockRes(env, { turnId, conversationId: conversationId ?? 'default' })
+      mockEmit(IPC.CHAT_TOOLING, { turnId, conversationId, tool: 'mock', note: '翻了翻小本本…' }, 150)
       // 为什么切 3 段：让 Chat 的按 turnId 聚合/流式渲染路径在浏览器里可调试
       const step = Math.ceil(reply.length / 3)
       for (let i = 0; i < 3; i += 1) {
-        mockEmit(IPC.CHAT_CHUNK, { turnId, delta: reply.slice(i * step, (i + 1) * step) }, 400 + i * 350)
+        mockEmit(IPC.CHAT_CHUNK, { turnId, conversationId, delta: reply.slice(i * step, (i + 1) * step) }, 400 + i * 350)
       }
-      mockEmit(IPC.CHAT_DONE, { turnId, reply, bubble: reply.slice(0, 18) }, 400 + 3 * 350)
+      mockEmit(IPC.CHAT_DONE, { turnId, conversationId, reply, bubble: reply.slice(0, 18) }, 400 + 3 * 350)
       return
     }
+    case IPC.CHAT_CONVERSATION_START:
+      mockRes(env, { conversationId: (env.payload as { conversationId?: string }).conversationId ?? `conv_${crypto.randomUUID().slice(0, 8)}` })
+      return
     case IPC.CHAT_HISTORY_GET:
       mockRes(env, { turns: [] })
       return

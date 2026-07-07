@@ -5,10 +5,19 @@ export type TurnRole = 'user' | 'pet'
 // hot 层：最近原文轮次（SQLite turns 表）
 export type Turn = {
   id: number
+  conversationId?: string
   role: TurnRole
   text: string
   t: number                     // epoch ms
   topics: string[]              // 写入后 cheap 档打标（失败= ['_untagged']）
+}
+
+export type ChatConversationSummary = {
+  id: string
+  title: string
+  t: number
+  updatedAt: number
+  messageCount: number
 }
 
 // warm 层：5 轮压 1 条（SQLite warm_segments 表）
