@@ -39,7 +39,7 @@ import { buildSegments } from './persona/assemble.js'
 import { Tracker } from './telemetry/track.js'
 import { TaskBoard, TaskBoardError } from './tasks/board.js'
 import { makeSubagentExecutor, validateTaskResult } from './tasks/subagent.js'
-import { publishTaskFeedback } from './tasks/feedback.js'
+import { buildTaskFeedbackText, publishTaskFeedback } from './tasks/feedback.js'
 import { StagingStore } from './staging/store.js'
 import { join } from 'node:path'
 
@@ -109,7 +109,7 @@ export function createHarness(emitLine: (line: string) => void) {
     }),
     enqueueResult: (task) => {
       const status = task.status
-      const summary = task.result?.didWhat?.join('；') || task.result?.leftover?.join('；') || task.goal
+      const summary = buildTaskFeedbackText(task)
       queue.push({
         source: 'task',
         priority: 1,

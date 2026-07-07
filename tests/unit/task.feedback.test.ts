@@ -78,4 +78,41 @@ describe('task result feedback', () => {
     expect(done?.payload.reply).toContain('路径超出授权范围')
     db.close()
   })
+
+  it('keeps detailed findings, changed paths, and stats in chat while using a compact bubble', async () => {
+    const db = new SessionsDb(join(mkdtempSync(join(tmpdir(), 'petsona-task-feedback-detail-')), 'sessions.db'))
+    const emitted: Array<{ type: string; payload: any }> = []
+
+    await publishTaskFeedback(baseTask({
+      agentType: 'explore',
+      result: {
+        ok: true,
+        didWhat: ['已完成配置排查'],
+        changes: [
+          { op: 'write', path: '/tmp/petsona/report.md' },
+          { op: 'move', path: '/tmp/petsona/archive/a.txt' },
+        ],
+        findings: ['真实结果：入口文件缺少结果摘要渲染', '建议：将 findings 写入对话历史'],
+        leftover: ['未修改登录流程，因为不在本次范围'],
+        stats: { files: 2, bytes: 4096, durationSec: 12 },
+      },
+    }), {
+      db,
+      conversationId: 'conv-detail',
+      emit: (event) => emitted.push(event),
+      runPostLLM: async ({ text }) => ({ text, bubble: '任务完成：已完成配置排查', loop: 'companion' }),
+    })
+
+    const bubble = emitted.find((event) => event.type === IPC.PET_BUBBLE)
+    const done = emitted.find((event) => event.type === IPC.CHAT_DONE)
+    const turns = db.recentTurnsByConversation('conv-detail', 10)
+
+    expect(bubble?.payload.text).toBe('任务完成：已完成配置排查')
+    expect(done?.payload.reply).toContain('真实结果：入口文件缺少结果摘要渲染')
+    expect(done?.payload.reply).toContain('/tmp/petsona/report.md')
+    expect(done?.payload.reply).toContain('2 个文件')
+    expect(done?.payload.reply).toContain('4096 字节')
+    expect(turns.at(-1)?.text).toContain('建议：将 findings 写入对话历史')
+    db.close()
+  })
 })
