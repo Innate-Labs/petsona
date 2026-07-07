@@ -20,6 +20,7 @@ export type TaskRecord = {
   goal: string
   agentType: AgentType
   scope: DispatchRequest['scope']
+  conversationId?: string
   skill?: string
   status: TaskStatus
   planId?: string                     // worker 型产生 staging 计划后回填

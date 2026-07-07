@@ -10,6 +10,7 @@ export type JSONSchema = Record<string, unknown>
 
 export type ToolCtx = {
   taskId?: string
+  conversationId?: string
   scope?: { dirs: string[]; net: boolean }
   dataDir: string
   emit: (event: { type: string; payload: unknown }) => void

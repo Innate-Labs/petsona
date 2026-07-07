@@ -194,7 +194,7 @@ export class CompanionLoop {
       for (const tu of toolUses) {
         emit({ type: IPC.CHAT_TOOLING, payload: { turnId, conversationId, tool: tu.name, note: pool.pick(tu.name) } })
         assistantBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input })
-        resultBlocks.push(await this.execTool(tu))
+        resultBlocks.push(await this.execTool(tu, conversationId))
       }
       convo.push({ role: 'assistant', content: assistantBlocks })
       convo.push({ role: 'user', content: resultBlocks })
@@ -203,7 +203,7 @@ export class CompanionLoop {
     return `（工具轮次到顶了）${''}`
   }
 
-  private async execTool(tu: LlmSseToolUse): Promise<LlmContentBlock> {
+  private async execTool(tu: LlmSseToolUse, conversationId: string): Promise<LlmContentBlock> {
     const { registry, hooks } = this.deps
     const call = { tool: tu.name, input: tu.input }
     const blocked = await hooks.runPreToolUse(call)
@@ -216,6 +216,7 @@ export class CompanionLoop {
     }
     try {
       const raw = await def.handler(tu.input, {
+        conversationId,
         dataDir: this.deps.paths.root,
         emit: this.deps.emit,
         gateway: this.deps.gateway,

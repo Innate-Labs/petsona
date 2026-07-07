@@ -28,7 +28,7 @@ export function Bubble({ bubble, onDismiss }: { bubble: PetBubblePayload; onDism
   }
 
   return (
-    <div className={`bubble bubble--${bubble.kind}`}>
+    <div className={`pet-bubble bubble--${bubble.kind}`}>
       <div className="bubble-text">{bubble.text}</div>
       {acts.length > 0 && (
         <div className="bubble-actions">

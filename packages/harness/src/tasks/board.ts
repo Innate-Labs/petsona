@@ -57,7 +57,7 @@ export class TaskBoard {
     this.executor = deps.executor ?? defaultExecutor
   }
 
-  dispatch(input: DispatchRequest, fromTaskId?: string): { taskId: string; status: TaskStatus } {
+  dispatch(input: DispatchRequest, fromTaskId?: string, conversationId?: string): { taskId: string; status: TaskStatus } {
     if (fromTaskId) throw new TaskBoardError('BAD_REQUEST', '子 Agent 内禁止再 dispatch')
     const req = validateDispatch(input, this.deps.getConfig())
     const task: TaskRecord = {
@@ -65,6 +65,7 @@ export class TaskBoard {
       goal: req.goal,
       agentType: req.agentType,
       scope: req.scope,
+      conversationId,
       status: 'queued',
       createdAt: Date.now(),
       usage: { toolCalls: 0, tokens: 0 },

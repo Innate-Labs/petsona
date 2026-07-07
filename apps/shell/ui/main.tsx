@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { DEFAULT_CONFIG, IPC, type Config, type PetBehaviorFrequency } from '@petsona/shared';
+import { DEFAULT_CONFIG, IPC, type Config, type PetBehaviorFrequency, type PetBubblePayload } from '@petsona/shared';
 import { ManagementPanel } from './ManagementPanel';
 import { FloatChat } from './float/FloatChat';
 import { PetVideoLayer } from './PetVideoLayer';
@@ -45,7 +45,7 @@ function isTauriRuntime() {
 }
 
 function PetView() {
-  const [bubbleVisible, setBubbleVisible] = useState(false);
+  const [bubble, setBubble] = useState<PetBubblePayload | null>(null);
   const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION);
   const [actionIndex, setActionIndex] = useState(0);
   const [behaviorFrequency, setBehaviorFrequency] = useState<PetBehaviorFrequency>(DEFAULT_CONFIG.pet.behaviorFrequency);
@@ -81,19 +81,22 @@ function PetView() {
   };
 
   useEffect(() => {
-    let hideBubbleTimer: number | null = null;
     const bubbleTimer = window.setTimeout(() => {
-      setBubbleVisible(true);
-      hideBubbleTimer = window.setTimeout(() => setBubbleVisible(false), PROACTIVE_BUBBLE_VISIBLE_MS);
+      setBubble({ text: '人，窝无聊', durationMs: PROACTIVE_BUBBLE_VISIBLE_MS, kind: 'proactive' });
     }, 2800);
 
     return () => {
       window.clearTimeout(bubbleTimer);
-      if (hideBubbleTimer !== null) window.clearTimeout(hideBubbleTimer);
       clearTailHold();
       clearPendingPetPress();
     };
   }, []);
+
+  useEffect(() => {
+    if (!bubble || bubble.durationMs <= 0) return undefined;
+    const hide = window.setTimeout(() => setBubble(null), bubble.durationMs);
+    return () => window.clearTimeout(hide);
+  }, [bubble]);
 
   useEffect(() => {
     let alive = true;
@@ -106,15 +109,17 @@ function PetView() {
     const unsubscribe = on<{ config: Config }>(IPC.CONFIG_UPDATED, ({ config }) => {
       setBehaviorFrequency(config.pet?.behaviorFrequency ?? DEFAULT_CONFIG.pet.behaviorFrequency);
     });
+    const unsubscribeBubble = on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble);
 
     return () => {
       alive = false;
       unsubscribe();
+      unsubscribeBubble();
     };
   }, []);
 
   const openChat = () => {
-    setBubbleVisible(false);
+    setBubble(null);
     void window.petAgent?.openChat();
   };
 
@@ -210,9 +215,9 @@ function PetView() {
 
   return (
     <main className="pet-stage" onPointerDownCapture={openPetMenuOnRightPointer} onContextMenu={openPetContextMenu}>
-      {bubbleVisible ? (
+      {bubble ? (
         <button className="pet-bubble" data-no-drag="true" onClick={openChat} type="button">
-          人，窝无聊
+          {bubble.text}
         </button>
       ) : null}
       <PetVideoLayer activeAnimation={animation} onEnded={handleAnimationEnded} />

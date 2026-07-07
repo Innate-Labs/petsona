@@ -39,6 +39,7 @@ import { buildSegments } from './persona/assemble.js'
 import { Tracker } from './telemetry/track.js'
 import { TaskBoard, TaskBoardError } from './tasks/board.js'
 import { makeSubagentExecutor, validateTaskResult } from './tasks/subagent.js'
+import { publishTaskFeedback } from './tasks/feedback.js'
 import { StagingStore } from './staging/store.js'
 import { join } from 'node:path'
 
@@ -74,6 +75,7 @@ export function createHarness(emitLine: (line: string) => void) {
   let authState: { loginState: 'anon' | 'logged_in'; email?: string } = { loginState: 'anon' }
   const tracker = new Tracker(gateway, deviceId(), () => authState.email)
   tracker.start()
+  let currentConversationId = 'default'
   const sysState = { accessibility: false, screenRecording: false, automation: {} as Record<string, boolean> }
   let emotion: Emotion = 'calm'
   let emotionCause = 'startup'
@@ -115,6 +117,12 @@ export function createHarness(emitLine: (line: string) => void) {
         dedupeKey: `task:${task.id}:${status}`,
         expiresAt: Date.now() + 30 * 60_000,
       })
+      void publishTaskFeedback(task, {
+        db,
+        conversationId: currentConversationId,
+        emit,
+        runPostLLM: (draft) => hooks.runPostLLM(draft),
+      }).catch((err) => console.error('[task-feedback] 反馈失败:', err))
     },
     onDispatch: (task) => tracker.track(TRACK.任务_派发, {
       agentType: task.agentType,
@@ -212,7 +220,6 @@ export function createHarness(emitLine: (line: string) => void) {
   router.onReq(IPC.PING, async () => ({ ok: true, uptimeSec: Math.floor((Date.now() - startedAt) / 1000) }))
 
   // 对话类
-  let currentConversationId = 'default'
   router.onReq(IPC.CHAT_CONVERSATION_START, async (p: { conversationId?: string }) => {
     currentConversationId = p?.conversationId?.trim() || `conv_${randomUUID().slice(0, 8)}`
     return { conversationId: currentConversationId }

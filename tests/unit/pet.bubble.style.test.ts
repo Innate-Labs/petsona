@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const styles = readFileSync(join(ROOT, 'apps/shell/ui/styles.css'), 'utf8')
+const main = readFileSync(join(ROOT, 'apps/shell/ui/main.tsx'), 'utf8')
+const bubbleComponent = readFileSync(join(ROOT, 'apps/shell/ui/pet/Bubble.tsx'), 'utf8')
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -27,5 +29,12 @@ describe('pet bubble style', () => {
     expect(bubble).not.toContain('-apple-system-control-background')
     expect(rule('.pet-bubble::before')).toBe('')
     expect(rule('.pet-bubble::after')).toBe('')
+  })
+
+  it('renders PET_BUBBLE events through the visible pet route', () => {
+    expect(main).toContain('type PetBubblePayload')
+    expect(main).toContain('on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble)')
+    expect(main).toContain('{bubble.text}')
+    expect(bubbleComponent).toContain('className={`pet-bubble bubble--${bubble.kind}`}')
   })
 })

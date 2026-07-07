@@ -110,7 +110,7 @@ export function registerLightTools(reg: ToolRegistry, deps: LightToolDeps): void
       },
       loop: 'companion',
       defaultLevel: 'L1',
-      handler: async (input, ctx) => deps.taskBoard.dispatch(input, ctx.taskId),
+      handler: async (input, ctx) => deps.taskBoard.dispatch(input, ctx.taskId, ctx.conversationId),
     },
     {
       name: 'check_task',
