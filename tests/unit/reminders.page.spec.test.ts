@@ -14,9 +14,9 @@ describe('Reminders page SPEC structure', () => {
     expect(page).toContain("title: '站立提醒'")
     expect(page).toContain('免打扰时段')
     expect(page).toContain('reminder-history-button')
-    expect(page).toContain("import iconHistory from './assets/figma/icon-history-18.svg'")
+    expect(page).toContain('className="reminder-history-button" type="button"')
     expect(page).toContain('<h1 className="panel-page-title">提醒事项</h1>')
-    expect(page).toContain('<img src={iconHistory} alt="" />')
+    expect(page).toContain('<svg viewBox="0 0 1024 1024"')
   })
 
   it('aligns the reminders title with the shared panel page header rhythm', () => {
@@ -30,9 +30,11 @@ describe('Reminders page SPEC structure', () => {
     expect(css).toContain('padding: 14px 18px 18px')
     expect(css).toContain('-webkit-app-region: no-drag')
     expect(page).toContain('className="reminder-history-back"')
+    expect(page).toContain('type="button"\n            onClick={backFromHistory}')
     expect(page).toContain("aria-label={selectedDate ? '返回统计列表' : '返回提醒事项'}")
     expect(page).toContain('<svg viewBox="0 0 1024 1024"')
     expect(page).toContain('<path d="M224.32 505.6a31.936 31.936 0 0 1 10.88-19.84')
+    expect(css).toContain('z-index: 13;')
     expect(page).not.toContain('<button className="chip" onClick={backFromHistory}>返回</button>')
   })
 

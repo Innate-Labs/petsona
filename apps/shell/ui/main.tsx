@@ -1,30 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DEFAULT_CONFIG, IPC, type Config, type PetBehaviorFrequency } from '@petsona/shared';
 import { ManagementPanel } from './ManagementPanel';
+import { FloatChat } from './float/FloatChat';
 import { PetVideoLayer } from './PetVideoLayer';
 import { installPetAgentBridge } from './petAgentBridge';
 import { DRAG_ANIMATION, IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from './petAnimations';
 import { getNextActionIndex, getRandomTailHoldMs, PROACTIVE_BUBBLE_VISIBLE_MS } from './petAnimationScheduler';
 import { on, request } from './lib/ipc';
-import avatarIcon from './assets/chat-icons/头像.png';
-import closeDefaultIcon from './assets/chat-icons/关闭=默认.png';
-import closeHoverIcon from './assets/chat-icons/关闭=悬停.png';
-import pinDefaultIcon from './assets/chat-icons/钉住=默认-1.png';
-import pinHoverIcon from './assets/chat-icons/钉住=悬停-1.png';
-import pinActiveIcon from './assets/chat-icons/钉住=钉住.png';
-import sendDefaultIcon from './assets/chat-icons/发送按钮-默认.png';
-import sendActiveIcon from './assets/chat-icons/发送按钮-输入后可发送.png';
 import './styles.css';
 
 type View = 'pet' | 'chat' | 'panel';
-type ChatMessage = { id: number; speaker: 'pet' | 'user'; text: string };
 
-const MIN_CHAT_INPUT_HEIGHT = 118;
-const MAX_CHAT_INPUT_HEIGHT = 236;
-const CHAT_INPUT_CHROME_HEIGHT = 72;
 const PET_DRAG_MOVE_THRESHOLD_PX = 6;
 const PET_PICK_UP_DELAY_MS = 2000;
 const MIN_PET_SIZE = 180;
@@ -278,176 +267,6 @@ function PetView() {
   );
 }
 
-function ChatView() {
-  const [pinned, setPinned] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const [inputFocused, setInputFocused] = useState(false);
-  const [inputHeight, setInputHeight] = useState(MIN_CHAT_INPUT_HEIGHT);
-  const [pinHovering, setPinHovering] = useState(false);
-  const [closeHovering, setCloseHovering] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const hasInput = inputValue.trim().length > 0;
-
-  const startChatResize = (direction: 'North' | 'South' | 'East' | 'West' | 'NorthEast' | 'NorthWest' | 'SouthEast' | 'SouthWest') => {
-    if (!isTauriRuntime()) return;
-    void getCurrentWindow().startResizeDragging(direction);
-  };
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return;
-    const win = getCurrentWindow();
-    void win.setShadow(false);
-    void win.setResizable(true);
-    void win.setSize(new LogicalSize(412, 537));
-    void win.setMinSize(new LogicalSize(412, 537));
-    void win.setMaxSize(new LogicalSize(872, 1092));
-  }, []);
-
-  useEffect(() => {
-    return window.petAgent?.onPinnedChanged(setPinned);
-  }, []);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const nextTextHeight = Math.max(46, textarea.scrollHeight);
-    setInputHeight((current) => {
-      const autoHeight = clamp(nextTextHeight + CHAT_INPUT_CHROME_HEIGHT, MIN_CHAT_INPUT_HEIGHT, MAX_CHAT_INPUT_HEIGHT);
-      return Math.max(current > autoHeight && inputValue ? current : autoHeight, MIN_CHAT_INPUT_HEIGHT);
-    });
-  }, [inputValue]);
-
-  const togglePinned = () => {
-    const nextPinned = !pinned;
-    setPinned(nextPinned);
-    void window.petAgent?.setChatPinned(nextPinned);
-  };
-
-  const sendMessage = () => {
-    const text = inputValue.trim();
-    if (!text) return;
-
-    setMessages((current) => [...current, { id: Date.now(), speaker: 'user', text }]);
-    setInputValue('');
-    setInputHeight(MIN_CHAT_INPUT_HEIGHT);
-  };
-
-  const startInputResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const startY = event.clientY;
-    const startHeight = inputHeight;
-
-    const resize = (moveEvent: PointerEvent) => {
-      setInputHeight(clamp(startHeight + startY - moveEvent.clientY, MIN_CHAT_INPUT_HEIGHT, MAX_CHAT_INPUT_HEIGHT));
-    };
-
-    const stopResize = () => {
-      window.removeEventListener('pointermove', resize);
-      window.removeEventListener('pointerup', stopResize);
-      window.removeEventListener('pointercancel', stopResize);
-    };
-
-    window.addEventListener('pointermove', resize);
-    window.addEventListener('pointerup', stopResize);
-    window.addEventListener('pointercancel', stopResize);
-  };
-
-  return (
-    <main className="chat-window">
-      <section className="chat-shell" style={{ '--chat-input-height': `${inputHeight}px` } as React.CSSProperties}>
-        <header className="chat-header" data-tauri-drag-region>
-          <button
-            className="chat-avatar-button"
-            type="button"
-            aria-label="打开主面板"
-            title="打开主面板"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              void window.petAgent?.openPanel('home');
-            }}
-          >
-            <img className="chat-avatar" src={avatarIcon} alt="" />
-          </button>
-          <button
-            className="chat-icon-button pin-button"
-            type="button"
-            onClick={togglePinned}
-            onMouseEnter={() => setPinHovering(true)}
-            onMouseLeave={() => setPinHovering(false)}
-            aria-label={pinned ? '取消固定聊天窗' : '固定聊天窗'}
-            title={pinned ? '取消固定' : '固定'}
-          >
-            <img src={pinned ? pinActiveIcon : pinHovering ? pinHoverIcon : pinDefaultIcon} alt="" />
-          </button>
-          <button
-            className="chat-icon-button close-button"
-            type="button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              void window.petAgent?.hideChat();
-            }}
-            onMouseEnter={() => setCloseHovering(true)}
-            onMouseLeave={() => setCloseHovering(false)}
-            aria-label="关闭聊天窗"
-            title="关闭"
-          >
-            <img src={closeHovering ? closeHoverIcon : closeDefaultIcon} alt="" />
-          </button>
-        </header>
-
-        <section className="chat-messages" aria-label="聊天消息">
-          {messages.map((message) => (
-            <article className={`message ${message.speaker}`} key={message.id}>
-              {message.text}
-            </article>
-          ))}
-        </section>
-
-        <footer className="chat-input-row" style={{ height: inputHeight }}>
-          <div
-            className="chat-input-resize-handle"
-            role="separator"
-            aria-label="调整输入框高度"
-            aria-orientation="horizontal"
-            onPointerDown={startInputResize}
-          />
-          <textarea
-            ref={textareaRef}
-            aria-label="聊天输入"
-            placeholder={inputFocused ? '' : '聊聊拯救地球の事'}
-            value={inputValue}
-            onChange={(event) => setInputValue(event.target.value)}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-              }
-            }}
-          />
-          <button className="send-button" type="button" aria-label="发送消息" disabled={!hasInput} onClick={sendMessage}>
-            <img src={hasInput ? sendActiveIcon : sendDefaultIcon} alt="" />
-          </button>
-        </footer>
-      </section>
-      <div className="chat-resize-edge north" onPointerDown={() => startChatResize('North')} />
-      <div className="chat-resize-edge south" onPointerDown={() => startChatResize('South')} />
-      <div className="chat-resize-edge east" onPointerDown={() => startChatResize('East')} />
-      <div className="chat-resize-edge west" onPointerDown={() => startChatResize('West')} />
-      <div className="chat-resize-corner north-east" onPointerDown={() => startChatResize('NorthEast')} />
-      <div className="chat-resize-corner north-west" onPointerDown={() => startChatResize('NorthWest')} />
-      <div className="chat-resize-corner south-east" onPointerDown={() => startChatResize('SouthEast')} />
-      <div className="chat-resize-corner south-west" onPointerDown={() => startChatResize('SouthWest')} />
-    </main>
-  );
-}
-
 function App() {
   const [view, setView] = useState<View>(getView);
 
@@ -469,13 +288,13 @@ function App() {
           <PetView />
         </section>
         <section className="preview-chat-panel">
-          <ChatView />
+          <FloatChat />
         </section>
       </main>
     );
   }
 
-  if (view === 'chat') return <ChatView />;
+  if (view === 'chat') return <FloatChat />;
   if (view === 'panel') return <ManagementPanel />;
   return <PetView />;
 }

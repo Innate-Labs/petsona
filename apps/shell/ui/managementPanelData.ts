@@ -45,6 +45,64 @@ export function getConversationTitle(text: string) {
   return trimmed.length > 16 ? `${trimmed.slice(0, 16)}...` : trimmed || 'Hi 主人';
 }
 
+export const CHAT_HISTORY_SESSION_GAP_MS = 30 * 60_000;
+
+export function turnsToHistoryConversations(msgs: ChatMsg[]): HistoryConversation[] {
+  const sessions: HistoryConversation[] = [];
+  let current: HistoryConversation | null = null;
+  let currentLastTime = 0;
+
+  for (let index = 0; index < msgs.length; index += 1) {
+    const message = msgs[index];
+    if (!message) continue;
+    const t = message.t ?? (currentLastTime || Date.now());
+    const shouldStartSession =
+      !current ||
+      (message.role === 'user' && current.messages.length > 0 && t - currentLastTime > CHAT_HISTORY_SESSION_GAP_MS);
+
+    if (shouldStartSession) {
+      current = {
+        id: `session-${message.key}`,
+        title: getConversationTitle(message.text),
+        timeLabel: formatHistoryTime(t),
+        group: classifyHistoryGroup(t),
+        messages: []
+      };
+      sessions.push(current);
+    }
+
+    current.messages.push(message);
+    currentLastTime = Math.max(currentLastTime, t);
+    current.timeLabel = formatHistoryTime(currentLastTime);
+    current.group = classifyHistoryGroup(currentLastTime);
+  }
+
+  return sessions.reverse();
+}
+
+export function classifyHistoryGroup(t: number): HistoryConversation['group'] {
+  const now = new Date();
+  const date = new Date(t);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.floor((todayStart - targetStart) / 86_400_000);
+  if (diffDays <= 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 7) return '本周';
+  if (now.getFullYear() === date.getFullYear() && now.getMonth() === date.getMonth()) return '本月';
+  return '更早';
+}
+
+export function formatHistoryTime(t: number): string {
+  const date = new Date(t);
+  const group = classifyHistoryGroup(t);
+  if (group === '今天') {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+  if (group === '昨天') return '昨天';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function createDefaultPanelState(): PanelState {
   return {
     pet: {

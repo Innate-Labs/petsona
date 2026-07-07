@@ -172,7 +172,7 @@ button {
   position: relative;
   width: 100%;
   height: 100%;
-  padding: 56px;
+  padding: 0;
   background: transparent;
 }
 
@@ -189,8 +189,6 @@ button {
     linear-gradient(180deg, #fff8ee 0%, #fff2e0 102.5%),
     #fff5e8;
   box-shadow:
-    0 14px 32px rgb(80 50 20 / 16%),
-    0 4px 14px rgb(80 50 20 / 10%),
     inset 0 2px 0 rgb(255 255 255 / 95%),
     inset 0 -8px 14px rgb(215 178 124 / 9%);
 }
@@ -244,6 +242,34 @@ button {
   object-fit: contain;
 }
 
+.float-history-header-title {
+  position: absolute;
+  left: 72px;
+  right: 92px;
+  top: 13px;
+  overflow: hidden;
+  color: #593200;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 24px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.history-button {
+  top: 16px;
+  right: 60px;
+  opacity: 0.3;
+  transition: opacity 120ms ease;
+}
+
+.history-button:hover,
+.history-button.active {
+  opacity: 1;
+}
+
 .pin-button {
   top: 16px;
   right: 34px;
@@ -295,6 +321,12 @@ button {
   content: "";
 }
 
+.chat-messages.history-list {
+  bottom: 8px;
+  padding-bottom: 8px;
+  overflow-y: auto;
+}
+
 .message {
   flex: 0 0 auto;
   width: fit-content;
@@ -320,6 +352,106 @@ button {
   max-width: min(90%, 620px);
   background: #f6ebdd;
   text-align: left;
+}
+
+.msg-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.msg-wrap.user {
+  align-items: flex-end;
+}
+
+.float-history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 2px 8px;
+  color: #593200;
+}
+
+.float-history-group {
+  display: grid;
+  gap: 5px;
+}
+
+.float-history-group h2 {
+  margin: 6px 4px 2px;
+  color: rgb(89 50 0 / 54%);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.float-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 13px;
+  color: #593200;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.float-history-row:hover {
+  background: #f6ebdd;
+}
+
+.float-history-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.float-history-row small {
+  color: rgb(89 50 0 / 48%);
+  font-size: 11px;
+}
+
+.float-history-empty {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  color: rgb(89 50 0 / 48%);
+  font-size: 13px;
+}
+
+.float-history-detail-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 4px 2px;
+  color: rgb(89 50 0 / 62%);
+  font-size: 12px;
+}
+
+.float-history-detail-header button {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  color: #593200;
+  background: rgb(255 255 255 / 72%);
+  cursor: pointer;
+}
+
+.float-history-detail-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-status {
@@ -425,75 +557,6 @@ button {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.chat-resize-edge,
-.chat-resize-corner {
-  position: absolute;
-  z-index: 8;
-  background: transparent;
-  -webkit-app-region: no-drag;
-}
-
-.chat-resize-edge.north,
-.chat-resize-edge.south {
-  left: 34px;
-  right: 34px;
-  height: 8px;
-  cursor: ns-resize;
-}
-
-.chat-resize-edge.north {
-  top: 0;
-}
-
-.chat-resize-edge.south {
-  bottom: 0;
-}
-
-.chat-resize-edge.east,
-.chat-resize-edge.west {
-  top: 34px;
-  bottom: 34px;
-  width: 8px;
-  cursor: ew-resize;
-}
-
-.chat-resize-edge.east {
-  right: 0;
-}
-
-.chat-resize-edge.west {
-  left: 0;
-}
-
-.chat-resize-corner {
-  width: 34px;
-  height: 34px;
-}
-
-.chat-resize-corner.north-east {
-  top: 0;
-  right: 0;
-  cursor: nesw-resize;
-}
-
-.chat-resize-corner.north-west {
-  top: 0;
-  left: 0;
-  cursor: nwse-resize;
-}
-
-.chat-resize-corner.south-east {
-  right: 0;
-  bottom: 0;
-  cursor: nwse-resize;
-}
-
-.chat-resize-corner.south-west {
-  bottom: 0;
-  left: 0;
-  cursor: nesw-resize;
 }
 
 @keyframes typingDot {
@@ -1004,6 +1067,8 @@ button {
 
 .panel-chat-topbar,
 .panel-page-header {
+  position: relative;
+  z-index: 13;
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;

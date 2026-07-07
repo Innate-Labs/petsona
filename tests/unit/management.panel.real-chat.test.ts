@@ -17,6 +17,15 @@ describe('ManagementPanel real chat wiring', () => {
     expect(panel).toContain('if (sendText(inputValue)) setInputValue')
   })
 
+  it('starts a blank visible chat session when the new conversation button is clicked', () => {
+    expect(panel).toContain('const [chatStartIndex, setChatStartIndex] = useState<number | null>(null)')
+    expect(panel).toContain('const visibleMsgs = chatStartIndex === null ? msgs : msgs.slice(chatStartIndex)')
+    expect(panel).toContain('const hasConversation = visibleMsgs.length > 0')
+    expect(panel).toContain('setChatStartIndex(msgs.length)')
+    expect(panel).toContain('setChatStartIndex(null)')
+    expect(panel).toContain('visibleMsgs.map((message)')
+  })
+
   it('does not seed fake history conversations in the management panel data model', () => {
     expect(data).not.toContain('HISTORY_SEEDS')
     expect(data).not.toContain('窝先记住这条对话')

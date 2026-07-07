@@ -7,7 +7,8 @@ import {
   type HistoryConversation,
   type PanelTab,
   createDefaultPanelState,
-  getConversationTitle
+  getConversationTitle,
+  turnsToHistoryConversations
 } from './managementPanelData';
 import { PetVideoLayer } from './PetVideoLayer';
 import { IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from './petAnimations';
@@ -33,7 +34,6 @@ import { ModalHost } from './ModalKit';
 import iconDelete from './assets/figma/icon-delete-28.svg';
 import { isTauri, on, request } from './lib/ipc';
 import { useChat } from './lib/useChat';
-import type { ChatMsg } from './lib/useChat';
 
 const CHAT_INPUT_PLACEHOLDER = '聊聊拯救地球の事';
 const SHOW_HOME_REMINDERS = false;
@@ -95,13 +95,15 @@ export function ManagementPanel() {
   const [ownerMood, setOwnerMood] = useState<(typeof OWNER_MOODS)[number]>(state.pet.ownerMood);
   const [activeTab, setActiveTab] = useState<PanelTab>(panelTabFromHash);
   const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => new Set());
+  const [chatStartIndex, setChatStartIndex] = useState<number | null>(null)
   const [inputValue, setInputValue] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const { msgs, listRef, sendText } = useChat()
-  const hasConversation = msgs.length > 0;
-  const currentTitle = hasConversation ? getConversationTitle(msgs.find((message) => message.role === 'user')?.text ?? '') : '新聊天';
+  const visibleMsgs = chatStartIndex === null ? msgs : msgs.slice(chatStartIndex)
+  const hasConversation = visibleMsgs.length > 0;
+  const currentTitle = hasConversation ? getConversationTitle(visibleMsgs.find((message) => message.role === 'user')?.text ?? '') : '新聊天';
   const companionDays = calculateCompanionDays(petData.firstCompanionDate);
   const ageLabel = calculatePetAgeLabel(petData.profile.birthday);
   const sidebarPet = {
@@ -152,12 +154,14 @@ export function ManagementPanel() {
   };
 
   const startNewConversation = () => {
+    setChatStartIndex(msgs.length)
     setInputValue('');
     setActiveTab('home');
     window.requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const openConversation = (conversation: HistoryConversation) => {
+    setChatStartIndex(null)
     setActiveTab('home');
     window.requestAnimationFrame(() => {
       const firstMessage = conversation.messages[0]?.key
@@ -286,7 +290,7 @@ export function ManagementPanel() {
             <div className="panel-chat-body" ref={listRef}>
               {hasConversation ? (
                 <div className="panel-message-stack">
-                  {msgs.map((message) => (
+                  {visibleMsgs.map((message) => (
                     <div className="panel-message-wrap" data-message-key={message.key} key={message.key}>
                       {message.reasoning && !message.text ? <div className="panel-reasoning">{petData.profile.nickname} 正在来的路上…</div> : null}
                       {(message.text || !message.reasoning) ? (
@@ -712,47 +716,6 @@ function normalizeSettingsConfig(config: Config): Config {
     llmDebug: { ...DEFAULT_CONFIG.llmDebug, ...(config.llmDebug ?? {}) },
     proactive: { ...DEFAULT_CONFIG.proactive, ...(config.proactive ?? {}) }
   };
-}
-
-function turnsToHistoryConversations(msgs: ChatMsg[]): HistoryConversation[] {
-  const conversations: HistoryConversation[] = [];
-  for (let index = 0; index < msgs.length; index += 1) {
-    const message = msgs[index];
-    if (!message || message.role !== 'user') continue;
-    const reply = msgs[index + 1]?.role === 'pet' ? msgs[index + 1] : undefined;
-    const t = message.t ?? reply?.t ?? Date.now();
-    conversations.unshift({
-      id: `turn-${message.key}`,
-      title: getConversationTitle(message.text),
-      timeLabel: formatHistoryTime(t),
-      group: classifyHistoryGroup(t),
-      messages: reply ? [message, reply] : [message]
-    });
-  }
-  return conversations;
-}
-
-function classifyHistoryGroup(t: number): HistoryConversation['group'] {
-  const now = new Date();
-  const date = new Date(t);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const diffDays = Math.floor((todayStart - targetStart) / 86_400_000);
-  if (diffDays <= 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (diffDays < 7) return '本周';
-  if (now.getFullYear() === date.getFullYear() && now.getMonth() === date.getMonth()) return '本月';
-  return '更早';
-}
-
-function formatHistoryTime(t: number): string {
-  const date = new Date(t);
-  const group = classifyHistoryGroup(t);
-  if (group === '今天') {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  }
-  if (group === '昨天') return '昨天';
-  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function StatusCard({ label, value }: { label: string; value: number }) {

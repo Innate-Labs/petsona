@@ -11,10 +11,10 @@ use tauri::{
     AppHandle, LogicalPosition, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
 
-const FLOAT_WIDTH: f64 = 412.0;
-const FLOAT_HEIGHT: f64 = 537.0;
-const FLOAT_MAX_WIDTH: f64 = 872.0;
-const FLOAT_MAX_HEIGHT: f64 = 1092.0;
+const FLOAT_WIDTH: f64 = 300.0;
+const FLOAT_HEIGHT: f64 = 425.0;
+const FLOAT_MAX_WIDTH: f64 = 760.0;
+const FLOAT_MAX_HEIGHT: f64 = 980.0;
 const FLOAT_GAP: f64 = 12.0;
 const PANEL_WIDTH: f64 = 960.0;
 const PANEL_HEIGHT: f64 = 720.0;
@@ -72,8 +72,8 @@ fn open_float_chat(app: AppHandle) {
         .max_inner_size(FLOAT_MAX_WIDTH, FLOAT_MAX_HEIGHT)
         .transparent(true)
         .decorations(false)
-        .shadow(false)
-        .always_on_top(true)
+        .shadow(true)
+        .always_on_top(false)
         .skip_taskbar(true)
         .resizable(true)
         .accept_first_mouse(true)

@@ -29,4 +29,11 @@ describe('shell window lifecycle', () => {
     expect(closeFloatBody).not.toContain('open_panel')
     expect(closeFloatBody).not.toContain('show_panel')
   })
+
+  it('opens the float chat unpinned so the UI pin button controls always-on-top', () => {
+    const openFloatBody = getFunctionBody('open_float_chat')
+
+    expect(openFloatBody).toContain('.always_on_top(false)')
+    expect(openFloatBody).not.toContain('.always_on_top(true)')
+  })
 })
