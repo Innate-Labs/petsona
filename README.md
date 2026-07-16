@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/shell/src-tauri/icons/icon.png" width="180" alt="宠格 Petsona"/>
+  <img src="assets/readme/petsona-cat.png" width="240" alt="宠格 Petsona 小猫形象"/>
 </p>
 
 <h1 align="center">宠格 Petsona</h1>
