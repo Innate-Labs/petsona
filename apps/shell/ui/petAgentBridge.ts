@@ -52,15 +52,10 @@ export function installPetAgentBridge() {
       if (isTauri()) await invoke('resize_pet_window', { size });
     },
     async setChatPinned(pinned) {
+      // 浮窗已 NSPanel 化恒定置顶（level 25），这里不再调 setAlwaysOnTop——
+      // 它会把 panel 的 level 覆盖成 3/0 反而破坏层级；pin 只保留「失焦不自动关闭」语义（FloatChat 内实现）
       chatPinned = pinned;
       emitPinnedChanged(pinned);
-      if (isTauri()) {
-        try {
-          await getCurrentWindow().setAlwaysOnTop(pinned);
-        } catch {
-          // Pinning is a nice-to-have visual affordance; keep the UI state even if the platform call is unavailable.
-        }
-      }
     },
     async hideChat() {
       if (isTauri()) {

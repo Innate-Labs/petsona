@@ -20,6 +20,9 @@ export type ChatConversationSummary = {
   messageCount: number
 }
 
+// 主动气泡专用会话 id：harness 落轮次、UI 恢复「最近会话」时跳过它（避免默认续在主动消息流上）
+export const PROACTIVE_CONVERSATION_ID = '__proactive__'
+
 // warm 层：5 轮压 1 条（SQLite warm_segments 表）
 export type WarmItem = {
   id: number

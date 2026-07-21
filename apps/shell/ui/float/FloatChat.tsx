@@ -6,8 +6,9 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri } from '../lib/ipc'
 import { useChat } from '../lib/useChat'
+import { TaskRunningNote } from '../TaskRunningNote'
 import { loadProfile } from '../lib/local'
-import { turnsToHistoryConversations, type HistoryConversation } from '../managementPanelData'
+import { conversationsToHistory, type HistoryConversation } from '../managementPanelData'
 import historyIcon from '../assets/figma/icon-history-18.svg'
 import avatarIcon from '../assets/demo-chat-icons/头像.png'
 import closeDefaultIcon from '../assets/demo-chat-icons/关闭=默认.png'
@@ -27,7 +28,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function FloatChat() {
-  const { msgs, listRef, sendText } = useChat()
+  const { msgs, conversations, listRef, sendText, startConversation, openConversation } = useChat()
   const [pinned, setPinned] = useState(false)
   const [historyMode, setHistoryMode] = useState<'chat' | 'list' | 'detail'>('chat')
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null)
@@ -39,9 +40,10 @@ export function FloatChat() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const name = loadProfile().name
   const hasInput = input.trim().length > 0
-  const historyConversations = useMemo(() => turnsToHistoryConversations(msgs), [msgs])
+  const historyConversations = useMemo(() => conversationsToHistory(conversations), [conversations])
   const selectedHistory = selectedHistoryId ? historyConversations.find((conversation) => conversation.id === selectedHistoryId) ?? null : null
-  const visibleMsgs = selectedHistory ? selectedHistory.messages : msgs
+  // 打开历史 = 切换当前会话（消息由 useChat 按真实 id 拉取），msgs 恒为当前会话
+  const visibleMsgs = msgs
 
   const submit = () => {
     if (sendText(input)) {
@@ -55,6 +57,16 @@ export function FloatChat() {
   const openHistory = () => {
     setHistoryMode((mode) => (mode === 'chat' ? 'list' : 'chat'))
     setSelectedHistoryId(null)
+  }
+
+  // 与首页「+ 新对话」同一逻辑：startConversation（新会话 id + 清空消息）+ 清输入 + 聚焦输入框
+  const startNewChat = () => {
+    void startConversation()
+    setHistoryMode('chat')
+    setSelectedHistoryId(null)
+    setInput('')
+    setInputHeight(MIN_CHAT_INPUT_HEIGHT)
+    window.requestAnimationFrame(() => textareaRef.current?.focus())
   }
 
   const close = () => {
@@ -135,6 +147,18 @@ export function FloatChat() {
             <div className="float-history-header-title">{historyMode === 'detail' && selectedHistory ? selectedHistory.title : '历史对话'}</div>
           )}
           <button
+            className="chat-icon-button new-chat-button"
+            type="button"
+            onClick={startNewChat}
+            aria-label="新对话"
+            title="新对话"
+          >
+            {/* 加号与首页「+ 新对话」同款形状；颜色/透明度跟随 history 按钮（#593200，默认 0.3 悬浮 1） */}
+            <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+              <path d="M9 3.2v11.6M3.2 9h11.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
             className={historyMode === 'chat' ? 'chat-icon-button history-button' : 'chat-icon-button history-button active'}
             type="button"
             onClick={openHistory}
@@ -174,6 +198,7 @@ export function FloatChat() {
               onOpen={(conversation) => {
                 setSelectedHistoryId(conversation.id)
                 setHistoryMode('chat')
+                void openConversation(conversation.id)
               }}
             />
           ) : (
@@ -194,7 +219,7 @@ export function FloatChat() {
                       {m.streaming && <span className="chat-cursor">▍</span>}
                     </article>
                   )}
-                  {m.tooling && <div className="float-tooling">{m.tooling}</div>}
+                  {m.tooling && <TaskRunningNote className="float-tooling" />}
                 </div>
               ))}
             </>

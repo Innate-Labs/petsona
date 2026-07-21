@@ -53,9 +53,9 @@ describe('Reminders page SPEC structure', () => {
   })
 
   it('supports once, daily, and weekly repeat choices in the add/edit flow', () => {
-    expect(page).toContain("value=\"once\"")
-    expect(page).toContain("value=\"daily\"")
-    expect(page).toContain("value=\"weekly\"")
+    expect(page).toContain("{ value: 'once', label: '一次性' }")
+    expect(page).toContain("{ value: 'daily', label: '每天' }")
+    expect(page).toContain("{ value: 'weekly', label: '每周' }")
     expect(page).toContain('weekday-grid')
     expect(page).toContain('MiniDatePicker')
   })

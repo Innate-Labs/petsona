@@ -10,12 +10,16 @@ use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     AppHandle, LogicalPosition, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder,
 };
+use tauri_nspanel::{ManagerExt, WebviewWindowExt};
 
 const FLOAT_WIDTH: f64 = 300.0;
 const FLOAT_HEIGHT: f64 = 425.0;
 const FLOAT_MAX_WIDTH: f64 = 760.0;
 const FLOAT_MAX_HEIGHT: f64 = 980.0;
 const FLOAT_GAP: f64 = 12.0;
+// 浮窗与宠物同级置顶、可打字不抢焦点（含义同 pet_window 的常量，panel 化后 always_on_top 不再起作用）
+const FLOAT_PANEL_LEVEL: i32 = 25;
+const FLOAT_PANEL_STYLE: i32 = (1 << 7) | (1 << 3); // NonactivatingPanel | Resizable
 const PANEL_WIDTH: f64 = 960.0;
 const PANEL_HEIGHT: f64 = 720.0;
 const MIN_PET_SIZE: f64 = 180.0;
@@ -39,29 +43,56 @@ fn open_panel(app: AppHandle, route: Option<String>) {
         format!("#/panel/{page}")
     };
     if let Some(win) = app.get_webview_window(label) {
+        set_move_to_active_space(&win);
         let _ = win.show();
         let _ = win.set_focus();
         let _ = win.eval(&format!("location.hash = '{hash}'"));
         return;
     }
     // 首次打开也要带上子页，否则深链在窗口创建路径上丢失
-    let _ = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(format!("index.html{hash}").into()))
+    let Ok(win) = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(format!("index.html{hash}").into()))
         .title("")
         .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
         .min_inner_size(PANEL_WIDTH, PANEL_HEIGHT)
         .transparent(true)
         .title_bar_style(TitleBarStyle::Overlay)
         .traffic_light_position(LogicalPosition::new(16.0, 22.0))
-        .build();
+        .build()
+    else {
+        return;
+    };
+    set_move_to_active_space(&win);
+}
+
+/// 面板是常规大窗，不适合 AllSpaces 常驻；MoveToActiveSpace = 在「当前」桌面弹出，
+/// 而不是把用户拽回它上次所在的桌面（与 float 跳桌面同源的体验问题）
+fn set_move_to_active_space(win: &tauri::WebviewWindow) {
+    use tauri_nspanel::cocoa::appkit::{NSWindow, NSWindowCollectionBehavior};
+    if let Ok(ns_win) = win.ns_window() {
+        unsafe {
+            NSWindow::setCollectionBehavior_(
+                ns_win as tauri_nspanel::cocoa::base::id,
+                NSWindowCollectionBehavior::NSWindowCollectionBehaviorMoveToActiveSpace,
+            );
+        }
+    }
 }
 
 /// 打开宠物旁快捷聊天浮窗（复用 #/float 路由）
+/// NSPanel 化 + CanJoinAllSpaces：浮窗和宠物一样出现在当前桌面/全屏 Space，
+/// 打开时永远重新贴到宠物旁——旧实现 show+set_focus 会把系统拽回浮窗上次所在的桌面。
 #[tauri::command]
 fn open_float_chat(app: AppHandle) {
     let label = "float";
     if let Some(win) = app.get_webview_window(label) {
-        let _ = win.show();
-        let _ = win.set_focus();
+        place_float_chat(&app, &win);
+        if let Ok(panel) = app.get_webview_panel(label) {
+            // panel.show = orderFrontRegardless + makeKey：当前 Space 直接浮出，不激活 App 不切桌面
+            panel.show();
+        } else {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
         return;
     }
 
@@ -82,7 +113,20 @@ fn open_float_chat(app: AppHandle) {
         return;
     };
     place_float_chat(&app, &win);
-    let _ = win.set_focus();
+    match win.to_panel() {
+        Ok(panel) => {
+            // nonactivating：输入框可打字（panel 可成 key window）但不把整个 App 激活到前台
+            panel.set_style_mask(FLOAT_PANEL_STYLE);
+            panel.set_level(FLOAT_PANEL_LEVEL);
+            panel.set_collection_behaviour(pet_window::all_spaces_behaviour());
+            panel.set_hides_on_deactivate(false);
+            panel.show();
+        }
+        Err(e) => {
+            log::error!("[float] to_panel 失败，降级普通窗口: {e:?}");
+            let _ = win.set_focus();
+        }
+    }
 }
 
 #[tauri::command]
@@ -254,6 +298,15 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("petsona shell 启动失败");
+}
+
+/// 宠物窗 Moved/Resized 时让可见的聊天浮窗贴着走（pet_window::watch_pet_window 调）
+pub(crate) fn follow_pet_with_float(app: &AppHandle) {
+    if let Some(float) = app.get_webview_window("float") {
+        if float.is_visible().unwrap_or(false) {
+            place_float_chat(app, &float);
+        }
+    }
 }
 
 fn place_float_chat(app: &AppHandle, win: &tauri::WebviewWindow) {

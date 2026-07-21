@@ -98,6 +98,60 @@ button {
   transition: opacity 120ms linear;
 }
 
+/* 任务状态灯：💡黄=执行中（呼吸）/ 绿=成功 / 红=失败 + 小字提示；与聊天气泡同位头顶，气泡优先 */
+.pet-task-light {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: 180px;
+  padding: 4px 9px;
+  border: 1.5px solid #fffaf1;
+  border-radius: 999px;
+  background: rgb(255 250 241 / 94%);
+  box-shadow: 0 5px 12px rgb(105 74 17 / 14%);
+  pointer-events: none; /* 不挡宠物点击/拖拽 */
+}
+
+.pet-task-light-bulb {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.pet-task-light.running .pet-task-light-bulb {
+  color: #e8a900;
+  animation: task-light-breathe 1.6s ease-in-out infinite;
+}
+
+.pet-task-light.done .pet-task-light-bulb {
+  color: #3fa557;
+}
+
+.pet-task-light.failed .pet-task-light-bulb {
+  color: #e05a4e;
+}
+
+.pet-task-light-note {
+  overflow: hidden;
+  color: #8b6a48;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes task-light-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .pet-bubble {
   position: absolute;
   top: 2px;
@@ -245,7 +299,7 @@ button {
 .float-history-header-title {
   position: absolute;
   left: 72px;
-  right: 92px;
+  right: 112px; /* 头部现在有 4 个按钮（新对话/历史/钉住/关闭），标题右边界避开它们 */
   top: 13px;
   overflow: hidden;
   color: #593200;
@@ -268,6 +322,25 @@ button {
 .history-button:hover,
 .history-button.active {
   opacity: 1;
+}
+
+/* 新对话：排在 history 左侧（按钮间距同 26px 一档），颜色与透明度节奏跟 history 一致 */
+.new-chat-button {
+  top: 16px;
+  right: 86px;
+  color: #593200;
+  opacity: 0.3;
+  transition: opacity 120ms ease;
+}
+
+.new-chat-button:hover {
+  opacity: 1;
+}
+
+.new-chat-button svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .pin-button {
@@ -1214,13 +1287,32 @@ button {
   color: #8b2c18;
 }
 
+/* 全局状态提示小字规范：面板/悬浮窗共用同一视觉（此前 float 两个 class 没有规则，
+   继承了消息正文的大号深色文字——「糯米正在来的路上」在悬浮窗里显得又大又黑） */
 .panel-reasoning,
-.panel-tooling {
+.panel-tooling,
+.float-reasoning,
+.float-tooling {
   width: fit-content;
   max-width: min(82%, 560px);
   color: #8b6a48;
   font-size: 13px;
   line-height: 18px;
+}
+
+/* 「任务执行中」逐字跳动：聊天框内不展示任务详情，只保留轻量动效 */
+.task-running-wave {
+  display: inline-flex;
+}
+
+.task-running-wave span {
+  display: inline-block;
+  animation: task-wave-bounce 1.15s ease-in-out infinite;
+}
+
+@keyframes task-wave-bounce {
+  0%, 55%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-3px); }
 }
 
 .chat-cursor {
@@ -1535,7 +1627,7 @@ button {
   transform: translateX(16px);
 }
 
-.settings-slider-row {
+.settings-select-row {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   align-items: center;
@@ -1543,68 +1635,161 @@ button {
   min-height: 38px;
 }
 
-.settings-slider-control {
+/* ---------- 自绘下拉框（全项目替代原生 select，米棕视觉统一） ---------- */
+
+.ui-dropdown {
   position: relative;
-  display: grid;
-  gap: 5px;
   min-width: 0;
 }
 
-.settings-slider-control input[type="range"] {
+.ui-dropdown-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  height: 18px;
-  margin: 0;
-  accent-color: #4f8b5b;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgb(116 81 43 / 12%);
+  border-radius: 10px;
+  outline: 0;
+  color: #4d2b08;
+  background: #fffaf1;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
   cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
 
-.settings-slider-labels {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 4px;
-  color: #9b846d;
-  font-size: 11px;
-  line-height: 14px;
-  text-align: center;
+.ui-dropdown-trigger:hover {
+  border-color: rgb(116 81 43 / 26%);
 }
 
-.settings-slider-labels span {
-  min-width: 0;
+.ui-dropdown-trigger.open {
+  border-color: rgb(201 155 114 / 60%);
+  box-shadow: 0 0 0 3px rgb(226 175 121 / 16%);
+}
+
+.ui-dropdown-value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-slider-labels span.active {
-  color: #2f5f36;
-  font-weight: 800;
+.ui-dropdown-caret {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: #9b846d;
+  transition: transform .15s ease;
 }
 
-.settings-slider-tooltip {
+.ui-dropdown-trigger.open .ui-dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.ui-dropdown-menu {
   position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
   right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 4;
-  max-width: min(260px, 100%);
-  padding: 7px 10px;
-  border: 1px solid rgb(116 81 43 / 12%);
-  border-radius: 10px;
-  color: #fff8ef;
-  background: rgb(64 36 7 / 92%);
-  box-shadow: 0 10px 22px rgb(64 36 7 / 20%);
-  font-size: 12px;
-  line-height: 17px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  transition: opacity .14s ease, transform .14s ease;
+  z-index: 24;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border: 1px solid rgb(116 81 43 / 14%);
+  border-radius: 12px;
+  background: #fffdf8;
+  box-shadow: 0 14px 30px rgb(64 36 7 / 18%);
+  max-height: 264px;
+  overflow-y: auto;
 }
 
-.settings-slider-control:hover .settings-slider-tooltip,
-.settings-slider-control:focus-within .settings-slider-tooltip {
-  opacity: 1;
-  transform: translateY(0);
+.ui-dropdown-menu.upward {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.ui-dropdown-option {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: #4d2b08;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-dropdown-option:hover {
+  background: #f6ecdd;
+}
+
+.ui-dropdown-option.selected {
+  background: linear-gradient(135deg, #f6e2c6 0%, #f0d3ab 100%);
+  font-weight: 700;
+}
+
+.ui-dropdown-option small {
+  color: #9b846d;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 15px;
+}
+
+/* 侧栏心情：贴原「纯文本」外观——无边框透明、粗体、紧凑 */
+.ui-dropdown.mood .ui-dropdown-trigger {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 650;
+}
+
+.ui-dropdown.mood .ui-dropdown-menu {
+  min-width: 128px;
+}
+
+/* 提醒弹窗：贴 reminder-control（38px 白底 12px 圆角粗体） */
+.ui-dropdown.reminder .ui-dropdown-trigger,
+.ui-dropdown.modal .ui-dropdown-trigger {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgb(113 78 38 / 10%);
+  border-radius: 12px;
+  color: #593200;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ui-dropdown.reminder .ui-dropdown-trigger.open,
+.ui-dropdown.modal .ui-dropdown-trigger.open {
+  border-color: rgb(201 155 114 / 42%);
+  box-shadow: 0 0 0 3px rgb(201 155 114 / 12%);
+}
+
+/* 宠物资料页：贴行内文本样（18px 粗体、无边框） */
+.pet-profile-field .ui-dropdown-trigger {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.pet-profile-field .ui-dropdown-menu {
+  min-width: 150px;
 }
 
 .settings-textarea {

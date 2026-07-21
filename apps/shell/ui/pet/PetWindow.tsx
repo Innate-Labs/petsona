@@ -88,6 +88,8 @@ export function PetWindow() {
   const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION)
   const [actionIndex, setActionIndex] = useState(0)
   const [behaviorFrequency, setBehaviorFrequency] = useState<PetBehaviorFrequency>(DEFAULT_CONFIG.pet.behaviorFrequency)
+  // ref 镜像：timer 回调里读它拿最新频率，不吃 setTimeout 闭包的旧值
+  const behaviorFrequencyRef = useRef<PetBehaviorFrequency>(behaviorFrequency)
   // 为什么记 press 起点：区分「拖动」与「点击」——startDragging 一旦触发，webview 收不到后续 click
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null)
   const animationRef = useRef<PetAnimation>(IDLE_ANIMATION)
@@ -155,8 +157,16 @@ export function PetWindow() {
       }
 
       switchAnimation(IDLE_ANIMATION)
-    }, getRandomTailHoldMs(behaviorFrequency))
+    }, getRandomTailHoldMs(behaviorFrequencyRef.current))
   }
+
+  // 频率改变时立即重排等待中的动作切换：否则旧档 timer（quiet 档最长 6 分钟）继续走完，
+  // 用户改完设置盯着宠物看不到任何变化，会以为设置没生效
+  useEffect(() => {
+    behaviorFrequencyRef.current = behaviorFrequency
+    if (tailHoldTimerRef.current !== null) handleAnimationEnded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [behaviorFrequency])
 
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return

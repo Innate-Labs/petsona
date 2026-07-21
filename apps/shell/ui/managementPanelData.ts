@@ -1,5 +1,5 @@
 import avatarIcon from './assets/chat-icons/头像.png';
-import type { ChatMsg } from './lib/useChat';
+import { PROACTIVE_CONVERSATION_ID, type ChatConversationSummary } from '@petsona/shared';
 
 export const OWNER_MOODS = ['🥳 开心', '😡 生气', '💔 伤心', '🌑 未知', '🙁 焦虑', '🪷 平静'] as const;
 
@@ -19,7 +19,7 @@ export type HistoryConversation = {
   title: string;
   timeLabel: string;
   group: '今天' | '昨天' | '本周' | '本月' | '更早';
-  messages: ChatMsg[];
+  messageCount: number;
 };
 
 export type PanelState = {
@@ -45,59 +45,19 @@ export function getConversationTitle(text: string) {
   return trimmed.length > 16 ? `${trimmed.slice(0, 16)}...` : trimmed || 'Hi 主人';
 }
 
-export const CHAT_HISTORY_SESSION_GAP_MS = 30 * 60_000;
-
-export function turnsToHistoryConversations(msgs: ChatMsg[]): HistoryConversation[] {
-  const sessions: HistoryConversation[] = [];
-  let current: HistoryConversation | null = null;
-  let currentLastTime = 0;
-  const byConversationId = new Map<string, HistoryConversation>();
-
-  for (let index = 0; index < msgs.length; index += 1) {
-    const message = msgs[index];
-    if (!message) continue;
-    const t = message.t ?? (currentLastTime || Date.now());
-    if (message.conversationId) {
-      const existing = byConversationId.get(message.conversationId);
-      current = existing ?? {
-        id: message.conversationId,
-        title: getConversationTitle(message.role === 'user' ? message.text : ''),
-        timeLabel: formatHistoryTime(t),
-        group: classifyHistoryGroup(t),
-        messages: []
-      };
-      if (!existing) {
-        byConversationId.set(message.conversationId, current);
-        sessions.push(current);
-      }
-    } else {
-      const shouldStartSession =
-      !current ||
-      (message.role === 'user' && current.messages.length > 0 && t - currentLastTime > CHAT_HISTORY_SESSION_GAP_MS);
-
-      if (shouldStartSession) {
-        current = {
-          id: `session-${message.key}`,
-          title: getConversationTitle(message.text),
-          timeLabel: formatHistoryTime(t),
-          group: classifyHistoryGroup(t),
-          messages: []
-        };
-        sessions.push(current);
-      }
-    }
-
-    if (!current) continue;
-    if ((!current.title || current.title === 'Hi 主人') && message.role === 'user') {
-      current.title = getConversationTitle(message.text);
-    }
-    current.messages.push(message);
-    currentLastTime = Math.max(currentLastTime, t);
-    current.timeLabel = formatHistoryTime(currentLastTime);
-    current.group = classifyHistoryGroup(currentLastTime);
-  }
-
-  return sessions.reverse();
+// 历史列表数据源改为后端 recentConversations（真实 conversationId）——
+// 旧版在前端按 30 分钟间隔猜分组并伪造 `session-<key>` id，从那种会话续聊时
+// 后端按伪 id 查不到任何历史 → 上下文彻底断裂（「没有上下文窗口」的直接原因）。
+export function conversationsToHistory(list: ChatConversationSummary[]): HistoryConversation[] {
+  return list
+    .filter((c) => c.id !== PROACTIVE_CONVERSATION_ID)
+    .map((c) => ({
+      id: c.id,
+      title: getConversationTitle(c.title),
+      timeLabel: formatHistoryTime(c.updatedAt),
+      group: classifyHistoryGroup(c.updatedAt),
+      messageCount: c.messageCount
+    }));
 }
 
 export function classifyHistoryGroup(t: number): HistoryConversation['group'] {

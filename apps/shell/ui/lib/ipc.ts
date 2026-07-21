@@ -124,6 +124,27 @@ let mockConfig: Config = DEFAULT_CONFIG
 let mockPersona: Record<string, unknown> = { persona_id: 'default', customDescription: '' }
 let mockLlmKeyTail: string | undefined
 
+// 内存版会话存储：让浏览器模式也能演练「按会话取历史 + 会话列表」的真实数据流
+type MockTurn = { id: number; conversationId: string; role: 'user' | 'pet'; text: string; t: number; topics: string[] }
+const mockTurns: MockTurn[] = []
+let mockTurnSeq = 0
+function mockInsertTurn(conversationId: string, role: 'user' | 'pet', text: string): void {
+  mockTurns.push({ id: ++mockTurnSeq, conversationId, role, text, t: Date.now(), topics: [] })
+}
+function mockConversations(): Array<{ id: string; title: string; t: number; updatedAt: number; messageCount: number }> {
+  const byId = new Map<string, { id: string; title: string; t: number; updatedAt: number; messageCount: number }>()
+  for (const turn of mockTurns) {
+    const c = byId.get(turn.conversationId)
+    if (!c) {
+      byId.set(turn.conversationId, { id: turn.conversationId, title: turn.text, t: turn.t, updatedAt: turn.t, messageCount: 1 })
+      continue
+    }
+    c.updatedAt = Math.max(c.updatedAt, turn.t)
+    c.messageCount += 1
+  }
+  return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
 // 记忆管理页联调用的假数据：覆盖各分类 + settings 可编辑项（内存态，删改在会话内生效）
 const mockMemories = [
   { name: 'preference-手冲咖啡', type: 'preference', topic: 'pref.coffee', source: 'chat', lastT: '2026-06-28T10:00:00Z', body: '只喝手冲，讨厌速溶咖啡' },
@@ -151,24 +172,48 @@ function mockRespond(env: Envelope): void {
       return
     case IPC.CHAT_SEND: {
       const { text, conversationId } = env.payload as ChatSendPayload
+      const convId = conversationId ?? 'default'
       const turnId = crypto.randomUUID()
-      const reply = `（mock 回声）你刚才说：「${text}」。接上 harness 之后我就会真的思考啦。`
-      mockRes(env, { turnId, conversationId: conversationId ?? 'default' })
-      mockEmit(IPC.CHAT_TOOLING, { turnId, conversationId, tool: 'mock', note: '翻了翻小本本…' }, 150)
+      // 回声里带上同会话轮数，肉眼即可验证「上下文窗口」在按会话累积
+      const priorInConv = mockTurns.filter((t) => t.conversationId === convId).length
+      const reply = `（mock 回声·本会话第 ${priorInConv + 2} 条）你刚才说：「${text}」。接上 harness 之后我就会真的思考啦。`
+      mockInsertTurn(convId, 'user', text)
+      mockRes(env, { turnId, conversationId: convId })
+      mockEmit(IPC.CHAT_TOOLING, { turnId, conversationId: convId, tool: 'mock', note: '翻了翻小本本…' }, 150)
+      // 触发词「任务」→ 模拟一条完整任务事件序列（created→progress→result），浏览器里可调试桌宠状态灯
+      if (text.includes('任务')) {
+        const taskId = `task_mock_${Date.now()}`
+        const failed = text.includes('失败')
+        mockEmit(IPC.TASK_EVENT, { t: 'created', taskId, goal: text.slice(0, 18) }, 250)
+        mockEmit(IPC.TASK_EVENT, { t: 'progress', taskId, note: '正在扫描文件…' }, 1200)
+        mockEmit(IPC.TASK_EVENT, { t: 'progress', taskId, note: '整理中 3/5…' }, 2600)
+        mockEmit(IPC.TASK_EVENT, {
+          t: 'result', taskId,
+          status: failed ? 'failed' : 'completed',
+          result: { ok: !failed, didWhat: ['mock 任务动作'], changes: [], leftover: [], stats: { durationSec: 4 } },
+        }, 4200)
+      }
       // 为什么切 3 段：让 Chat 的按 turnId 聚合/流式渲染路径在浏览器里可调试
       const step = Math.ceil(reply.length / 3)
       for (let i = 0; i < 3; i += 1) {
-        mockEmit(IPC.CHAT_CHUNK, { turnId, conversationId, delta: reply.slice(i * step, (i + 1) * step) }, 400 + i * 350)
+        mockEmit(IPC.CHAT_CHUNK, { turnId, conversationId: convId, delta: reply.slice(i * step, (i + 1) * step) }, 400 + i * 350)
       }
-      mockEmit(IPC.CHAT_DONE, { turnId, conversationId, reply, bubble: reply.slice(0, 18) }, 400 + 3 * 350)
+      setTimeout(() => mockInsertTurn(convId, 'pet', reply), 400 + 3 * 350)
+      mockEmit(IPC.CHAT_DONE, { turnId, conversationId: convId, reply, bubble: reply.slice(0, 18) }, 400 + 3 * 350)
       return
     }
     case IPC.CHAT_CONVERSATION_START:
       mockRes(env, { conversationId: (env.payload as { conversationId?: string }).conversationId ?? `conv_${crypto.randomUUID().slice(0, 8)}` })
       return
-    case IPC.CHAT_HISTORY_GET:
-      mockRes(env, { turns: [] })
+    case IPC.CHAT_HISTORY_GET: {
+      const { limit, conversationId, includeConversations } = env.payload as { limit?: number; conversationId?: string; includeConversations?: boolean }
+      const pool = conversationId ? mockTurns.filter((t) => t.conversationId === conversationId) : mockTurns
+      mockRes(env, {
+        turns: pool.slice(-(limit ?? 50)),
+        conversations: includeConversations ? mockConversations() : undefined,
+      })
       return
+    }
     case IPC.TASK_LIST_GET:
       mockRes(env, { tasks: [] })
       return
@@ -192,6 +237,8 @@ function mockRespond(env: Envelope): void {
         scopes: patch?.scopes ?? mockConfig.scopes,
       }
       mockRes(env, { config: mockConfig })
+      // 真 harness CONFIG_SET 后会广播 CONFIG_UPDATED（宠物动作频率等靠它热更新），mock 保持同构
+      mockEmit(IPC.CONFIG_UPDATED, { config: mockConfig }, 60)
       return
     }
     case IPC.PERSONA_GET:

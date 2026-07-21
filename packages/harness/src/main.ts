@@ -4,7 +4,7 @@
 import { createInterface } from 'node:readline'
 import { randomUUID } from 'node:crypto'
 import type { ChatHistoryGetPayload, ChatSendPayload, Emotion, Envelope, FileOp, StagingPlan, TaskResult } from '@petsona/shared'
-import { IPC, TRACK } from '@petsona/shared'
+import { IPC, PROACTIVE_CONVERSATION_ID, TRACK } from '@petsona/shared'
 import { decodeLine, encodeLine, makeEvent } from './ipc/envelope.js'
 import { Router, IpcError } from './ipc/router.js'
 import { anonUserId, applyPendingMigration, dataRoot, deviceId, resolvePaths, writePending } from './paths.js'
@@ -44,7 +44,6 @@ import { StagingStore } from './staging/store.js'
 import { join } from 'node:path'
 
 const startedAt = Date.now()
-const PROACTIVE_CONVERSATION_ID = '__proactive__'
 
 export function createHarness(emitLine: (line: string) => void) {
   const emit = (e: { type: string; payload: unknown }) => {

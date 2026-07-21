@@ -1,59 +1,40 @@
 import { describe, expect, it } from 'vitest'
-import { CHAT_HISTORY_SESSION_GAP_MS, turnsToHistoryConversations } from '../../apps/shell/ui/managementPanelData'
-import type { ChatMsg } from '../../apps/shell/ui/lib/useChat'
+import { PROACTIVE_CONVERSATION_ID, type ChatConversationSummary } from '@petsona/shared'
+import { conversationsToHistory } from '../../apps/shell/ui/managementPanelData'
 
-function msg(key: string, role: ChatMsg['role'], text: string, t: number, conversationId?: string): ChatMsg {
-  return { key, role, text, t, conversationId }
+function summary(id: string, title: string, updatedAt: number, messageCount = 2): ChatConversationSummary {
+  return { id, title, t: updatedAt - 60_000, updatedAt, messageCount }
 }
 
-describe('history conversation grouping', () => {
-  it('keeps multiple nearby turns in one conversation session', () => {
-    const first = Date.UTC(2026, 6, 7, 10, 0)
-    const second = first + 5 * 60_000
-    const conversations = turnsToHistoryConversations([
-      msg('u1', 'user', '今天我有点困', first),
-      msg('p1', 'pet', '那先喝点水，慢慢来。', first + 10_000),
-      msg('u2', 'user', '我还可以', second),
-      msg('p2', 'pet', '嗯，窝陪你继续。', second + 10_000)
-    ])
-
-    expect(conversations).toHaveLength(1)
-    expect(conversations[0]?.id).toBe('session-u1')
-    expect(conversations[0]?.title).toBe('今天我有点困')
-    expect(conversations[0]?.messages.map((item) => item.key)).toEqual(['u1', 'p1', 'u2', 'p2'])
-  })
-
-  it('starts a new history conversation after a long idle gap', () => {
-    const first = Date.UTC(2026, 6, 7, 10, 0)
-    const second = first + CHAT_HISTORY_SESSION_GAP_MS + 60_000
-    const conversations = turnsToHistoryConversations([
-      msg('u1', 'user', '上午聊工作', first),
-      msg('p1', 'pet', '收到。', first + 10_000),
-      msg('u2', 'user', '晚上聊晚饭', second),
-      msg('p2', 'pet', '今天吃点轻松的。', second + 10_000)
-    ])
-
-    expect(conversations).toHaveLength(2)
-    expect(conversations.map((item) => item.id)).toEqual(['session-u2', 'session-u1'])
-    expect(conversations.map((item) => item.messages.map((message) => message.key))).toEqual([
-      ['u2', 'p2'],
-      ['u1', 'p1']
-    ])
-  })
-
-  it('uses explicit conversation ids instead of timestamp gaps when present', () => {
-    const first = Date.UTC(2026, 6, 7, 10, 0)
-    const conversations = turnsToHistoryConversations([
-      msg('u1', 'user', '第一条真实会话', first, 'conv-a'),
-      msg('p1', 'pet', '收到。', first + 10_000, 'conv-a'),
-      msg('u2', 'user', '第二条真实会话', first + 60_000, 'conv-b'),
-      msg('p2', 'pet', '也收到。', first + 70_000, 'conv-b')
+describe('history conversation list (backend-sourced)', () => {
+  it('maps backend summaries with their real conversation ids', () => {
+    const now = Date.now()
+    const conversations = conversationsToHistory([
+      summary('conv-b', '第二条真实会话', now),
+      summary('conv-a', '第一条真实会话', now - 3_600_000)
     ])
 
     expect(conversations.map((item) => item.id)).toEqual(['conv-b', 'conv-a'])
-    expect(conversations.map((item) => item.messages.map((message) => message.key))).toEqual([
-      ['u2', 'p2'],
-      ['u1', 'p1']
+    expect(conversations[0]?.title).toBe('第二条真实会话')
+    expect(conversations[0]?.messageCount).toBe(2)
+  })
+
+  it('filters the proactive-bubble conversation out of the visible history', () => {
+    const now = Date.now()
+    const conversations = conversationsToHistory([
+      summary(PROACTIVE_CONVERSATION_ID, '主人主人！', now),
+      summary('conv-a', '真实会话', now - 1_000)
     ])
+
+    expect(conversations.map((item) => item.id)).toEqual(['conv-a'])
+  })
+
+  it('truncates long titles the same way the chat page does', () => {
+    const conversations = conversationsToHistory([
+      summary('conv-long', '这是一条特别特别长需要被截断的会话标题文本', Date.now())
+    ])
+
+    expect(conversations[0]?.title.endsWith('...')).toBe(true)
+    expect(conversations[0]?.title.length).toBeLessThanOrEqual(19)
   })
 })

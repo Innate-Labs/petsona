@@ -1,7 +1,8 @@
 // §2.3 Config（config.json）
 
 export type ProactiveFrequency = 'high' | 'mid' | 'low' | 'off'
-export type PetBehaviorFrequency = 'quiet' | 'normal' | 'active'
+// continuous：零间隔连续轮播（动作↔坐姿交替不停），2026-07 设置页需求
+export type PetBehaviorFrequency = 'quiet' | 'normal' | 'active' | 'continuous'
 export type LlmProviderId = 'deepseek' | 'openai-compatible' | 'openrouter'
 
 export type Config = {

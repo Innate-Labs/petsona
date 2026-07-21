@@ -5,6 +5,7 @@ import { IPC } from '@petsona/shared'
 import type { Config, ConfigGetRes, ReminderFiredPayload, ReminderSetPayload } from '@petsona/shared'
 import { on, request } from './lib/ipc'
 import { loadPrefs, savePrefs } from './lib/local'
+import { Dropdown } from './Dropdown'
 import {
   addTemplate,
   completeInstance,
@@ -219,11 +220,17 @@ function ReminderForm({ initial, onCancel, onSubmit }: { initial: FormDraft; onC
         <label>内容<input className="reminder-control" value={draft.title} placeholder="例如：下班之后拿快递" onChange={(e) => setDraft({ ...draft, title: e.target.value })} /></label>
         <label>提醒时间<TimeField value={draft.time} onChange={(time) => setDraft({ ...draft, time })} /></label>
         <label>重复规则</label>
-        <select className="reminder-control reminder-select" value={draft.repeatType} onChange={(e) => setDraft({ ...draft, repeatType: e.target.value as FormDraft['repeatType'], date: draft.date || todayDate() })}>
-          <option value="once">一次性</option>
-          <option value="daily">每天</option>
-          <option value="weekly">每周</option>
-        </select>
+        <Dropdown
+          value={draft.repeatType}
+          options={[
+            { value: 'once', label: '一次性' },
+            { value: 'daily', label: '每天' },
+            { value: 'weekly', label: '每周' },
+          ]}
+          onChange={(repeatType) => setDraft({ ...draft, repeatType, date: draft.date || todayDate() })}
+          ariaLabel="重复规则"
+          className="reminder"
+        />
         {draft.repeatType === 'once' && <MiniDatePicker value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />}
         {draft.repeatType === 'weekly' && (
           <div className="weekday-grid">

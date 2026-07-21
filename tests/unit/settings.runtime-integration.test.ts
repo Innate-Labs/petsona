@@ -11,6 +11,9 @@ const panelUi = readFileSync(join(ROOT, 'apps/shell/ui/ManagementPanel.tsx'), 'u
 
 describe('settings runtime integration', () => {
   it('maps behavior frequency to real animation hold intervals', () => {
+    // continuous = 零间隔：动作播完立即回坐姿、坐姿播完立即接下一动作（连续轮播档）
+    expect(getRandomTailHoldMs('continuous', () => 0)).toBe(0)
+    expect(getRandomTailHoldMs('continuous', () => 1)).toBe(0)
     expect(getRandomTailHoldMs('active', () => 0)).toBe(30_000)
     expect(getRandomTailHoldMs('active', () => 1)).toBe(45_000)
     expect(getRandomTailHoldMs('normal', () => 0)).toBe(120_000)
@@ -23,11 +26,14 @@ describe('settings runtime integration', () => {
     expect(mainUi).toContain('const [behaviorFrequency, setBehaviorFrequency]')
     expect(mainUi).toContain('IPC.CONFIG_GET')
     expect(mainUi).toContain('IPC.CONFIG_UPDATED')
-    expect(mainUi).toContain('getRandomTailHoldMs(behaviorFrequency)')
+    // timer 回调经 ref 取最新档位，且频率变化时立即重排等待中的切换（否则旧档 timer 最长 6 分钟才生效）
+    expect(mainUi).toContain('getRandomTailHoldMs(behaviorFrequencyRef.current)')
+    expect(mainUi).toContain('if (tailHoldTimerRef.current !== null) handleAnimationEnded()')
 
     expect(panelUi).toContain('function useBehaviorFrequency()')
     expect(panelUi).toContain('IPC.CONFIG_UPDATED')
-    expect(panelUi).toContain('getRandomTailHoldMs(behaviorFrequency)')
+    expect(panelUi).toContain('getRandomTailHoldMs(behaviorFrequencyRef.current)')
+    expect(panelUi).toContain('if (tailHoldTimerRef.current !== null) handleAnimationEnded()')
   })
 
   it('appends the user persona prompt after the app persona core', () => {

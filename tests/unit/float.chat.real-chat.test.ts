@@ -19,9 +19,19 @@ describe('FloatChat real chat wiring', () => {
 
   it('uses the shared IPC chat hook inside the float chat surface', () => {
     expect(floatChat).toContain("import { useChat } from '../lib/useChat'")
-    expect(floatChat).toContain('const { msgs, listRef, sendText } = useChat()')
+    expect(floatChat).toContain('const { msgs, conversations, listRef, sendText, startConversation, openConversation } = useChat()')
     expect(floatChat).toContain('if (sendText(input)) {')
     expect(floatChat).toContain("setInput('')")
+  })
+
+  it('offers a new-conversation button matching the home page flow', () => {
+    expect(floatChat).toContain('const { msgs, conversations, listRef, sendText, startConversation, openConversation } = useChat()')
+    expect(floatChat).toContain('className="chat-icon-button new-chat-button"')
+    expect(floatChat).toContain('onClick={startNewChat}')
+    // 与首页一致：开新会话 + 清输入 + 聚焦
+    expect(floatChat).toContain('void startConversation()')
+    expect(floatChat).toContain('window.requestAnimationFrame(() => textareaRef.current?.focus())')
+    expect(styles).toContain('.new-chat-button')
   })
 
   it('keeps history, pin, and close as separate float chat actions', () => {
@@ -69,8 +79,9 @@ describe('FloatChat real chat wiring', () => {
   })
 
   it('renders an in-float history panel backed by the shared panel history model', () => {
-    expect(floatChat).toContain("import { turnsToHistoryConversations")
-    expect(floatChat).toContain('const historyConversations = useMemo(() => turnsToHistoryConversations(msgs)')
+    expect(floatChat).toContain("import { conversationsToHistory")
+    expect(floatChat).toContain('const historyConversations = useMemo(() => conversationsToHistory(conversations)')
+    expect(floatChat).toContain('void openConversation(conversation.id)')
     expect(floatChat).toContain('className="float-history-header-title"')
     expect(floatChat).toContain('className="float-history-panel"')
     expect(floatChat).toContain('className="float-history-row"')

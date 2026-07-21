@@ -6,9 +6,9 @@ import {
   OWNER_MOODS,
   type HistoryConversation,
   type PanelTab,
+  conversationsToHistory,
   createDefaultPanelState,
-  getConversationTitle,
-  turnsToHistoryConversations
+  getConversationTitle
 } from './managementPanelData';
 import { PetVideoLayer } from './PetVideoLayer';
 import { IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from './petAnimations';
@@ -30,6 +30,8 @@ import {
 import sendDefaultIcon from './assets/chat-icons/发送按钮-默认.png';
 import sendActiveIcon from './assets/chat-icons/发送按钮-输入后可发送.png';
 import { Reminders } from './Reminders';
+import { Dropdown } from './Dropdown';
+import { TaskRunningNote } from './TaskRunningNote';
 import { ModalHost } from './ModalKit';
 import iconDelete from './assets/figma/icon-delete-28.svg';
 import { isTauri, on, request } from './lib/ipc';
@@ -46,16 +48,18 @@ const REMINDER_ITEMS = [
 const UPCOMING_REMINDERS: { label: string; next: string }[] = [];
 const DEFAULT_PERSONA_PROMPT = '';
 const PERSONA_PROMPT_MAX = 500;
+// hint 只出现在展开的下拉菜单里（选中态收起后不再常显时间说明）
 const BEHAVIOR_OPTIONS: Array<{ value: PetBehaviorFrequency; label: string; hint: string }> = [
-  { value: 'quiet', label: '安静', hint: '安静：约 5 分钟换一次动作' },
-  { value: 'normal', label: '正常', hint: '正常：约 2 分钟换一次动作' },
-  { value: 'active', label: '活跃', hint: '活跃：约 30 秒换一次动作' }
+  { value: 'quiet', label: '安静', hint: '约 5 分钟换一次动作' },
+  { value: 'normal', label: '正常', hint: '约 2 分钟换一次动作' },
+  { value: 'active', label: '活跃', hint: '约 30 秒换一次动作' },
+  { value: 'continuous', label: '连续', hint: '动作不间断轮播，每次回到坐姿再接下一个' }
 ];
 const PROACTIVE_OPTIONS: Array<{ value: ProactiveFrequency; label: string; hint: string }> = [
-  { value: 'high', label: '活跃', hint: '活跃：约 15 分钟一次' },
-  { value: 'mid', label: '正常', hint: '正常：约 45 分钟一次' },
-  { value: 'low', label: '安静', hint: '安静：约 2 小时一次' },
-  { value: 'off', label: '关闭', hint: '关闭：不主动闲聊' }
+  { value: 'high', label: '活跃', hint: '约 15 分钟一次' },
+  { value: 'mid', label: '正常', hint: '约 45 分钟一次' },
+  { value: 'low', label: '安静', hint: '约 2 小时一次' },
+  { value: 'off', label: '关闭', hint: '不主动闲聊' }
 ];
 const LLM_PROVIDER_OPTIONS: Array<{ value: LlmProviderId; label: string; baseUrl: string; model: string }> = [
   { value: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-v4-flash' },
@@ -99,7 +103,7 @@ export function ManagementPanel() {
   const [inputFocused, setInputFocused] = useState(false);
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const { msgs, listRef, sendText, startConversation, openConversation: openChatConversation } = useChat()
+  const { msgs, conversations, listRef, sendText, startConversation, openConversation: openChatConversation } = useChat()
   const visibleMsgs = msgs
   const hasConversation = visibleMsgs.length > 0;
   const currentTitle = hasConversation ? getConversationTitle(visibleMsgs.find((message) => message.role === 'user')?.text ?? '') : '新聊天';
@@ -135,8 +139,9 @@ export function ManagementPanel() {
     savePetDataState(typeof window === 'undefined' ? null : window.localStorage, petData);
   }, [petData]);
 
+  // 历史列表来自后端会话摘要（真实 conversationId），不再从当前消息流猜分组
   const groupedHistory = useMemo(() => {
-    return turnsToHistoryConversations(msgs)
+    return conversationsToHistory(conversations)
       .filter((item) => !hiddenHistoryIds.has(item.id))
       .reduce<Record<HistoryConversation['group'], HistoryConversation[]>>(
       (groups, item) => {
@@ -145,7 +150,7 @@ export function ManagementPanel() {
       },
       { 今天: [], 昨天: [], 本周: [], 本月: [], 更早: [] }
     );
-  }, [hiddenHistoryIds, msgs]);
+  }, [hiddenHistoryIds, conversations]);
 
   const chooseShortcut = (prompt: string) => {
     setInputValue(prompt);
@@ -160,14 +165,9 @@ export function ManagementPanel() {
   };
 
   const openConversation = (conversation: HistoryConversation) => {
-    openChatConversation(conversation.id, conversation.messages)
+    // 消息按真实 conversationId 从后端拉取；续聊时后端按同一 id 取近 N 轮做上下文
+    void openChatConversation(conversation.id);
     setActiveTab('home');
-    window.requestAnimationFrame(() => {
-      const firstMessage = conversation.messages[0]?.key
-        ? document.querySelector(`[data-message-key="${conversation.messages[0].key}"]`)
-        : null;
-      firstMessage?.scrollIntoView({ block: 'center' });
-    });
   };
 
   const deleteConversation = (conversationId: string) => {
@@ -298,7 +298,7 @@ export function ManagementPanel() {
                           {message.streaming ? <span className="chat-cursor">▍</span> : null}
                         </article>
                       ) : null}
-                      {message.tooling ? <div className="panel-tooling">{message.tooling}</div> : null}
+                      {message.tooling ? <TaskRunningNote className="panel-tooling" /> : null}
                     </div>
                   ))}
                 </div>
@@ -369,17 +369,6 @@ type LlmKeyMeta = {
 };
 
 function SettingsPage() {
-  const behaviorOptions: Array<{ value: PetBehaviorFrequency; label: string; hint: string }> = [
-    { value: 'quiet', label: '安静', hint: '安静：约 5 分钟换一次动作' },
-    { value: 'normal', label: '正常', hint: '正常：约 2 分钟换一次动作' },
-    { value: 'active', label: '活跃', hint: '活跃：约 30 秒换一次动作' }
-  ];
-  const proactiveOptions: Array<{ value: ProactiveFrequency; label: string; hint: string }> = [
-    { value: 'high', label: '活跃', hint: '活跃：约 15 分钟一次' },
-    { value: 'mid', label: '正常', hint: '正常：约 45 分钟一次' },
-    { value: 'low', label: '安静', hint: '安静：约 2 小时一次' },
-    { value: 'off', label: '关闭', hint: '关闭：不主动闲聊' }
-  ];
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [personaText, setPersonaText] = useState(DEFAULT_PERSONA_PROMPT);
   const [petVisible, setPetVisible] = useState(true);
@@ -584,16 +573,16 @@ function SettingsPage() {
           <div className="settings-section-heading">
             <h2>行为设置</h2>
           </div>
-          <SettingsSlider
+          <SettingsSelect
             label="行为变化"
             value={config.pet.behaviorFrequency}
-            options={behaviorOptions}
+            options={BEHAVIOR_OPTIONS}
             onChange={changeBehaviorFrequency}
           />
-          <SettingsSlider
+          <SettingsSelect
             label="主动说话"
             value={config.proactive.frequency}
-            options={proactiveOptions}
+            options={PROACTIVE_OPTIONS}
             onChange={changeProactiveFrequency}
           />
         </section>
@@ -619,18 +608,18 @@ function SettingsPage() {
         <section className="settings-section settings-section-debug" aria-label="调试设置">
           <div className="settings-section-heading">
             <h2>调试设置</h2>
-            <p>大模型 API 接口设置仅用于开发调试，不作为最终用户入口。</p>
+            {/* 网关安全约束：无 BYOK key 时不接受 provider/baseUrl/model 覆盖（防托管 key 被导向任意端点），SettingsPage 里要说清楚 */}
+            <p>Provider / Base URL / Model 需配合你自己的 API Key 保存后才生效；不填 Key 时聊天走云端默认模型。</p>
           </div>
-          <label className="settings-field">
+          <div className="settings-field">
             <span>Provider</span>
-            <select value={config.llmDebug.provider} onChange={(event) => changeLlmProvider(event.target.value as LlmProviderId)}>
-              {LLM_PROVIDER_OPTIONS.map((option) => (
-                <option value={option.value} key={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Dropdown
+              value={config.llmDebug.provider}
+              options={LLM_PROVIDER_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              onChange={changeLlmProvider}
+              ariaLabel="Provider"
+            />
+          </div>
           <label className="settings-field">
             <span>Base URL</span>
             <input value={config.llmDebug.baseUrl} onChange={(event) => setConfig({ ...config, llmDebug: { ...config.llmDebug, baseUrl: event.target.value } })} />
@@ -664,7 +653,8 @@ function SettingsPage() {
   );
 }
 
-function SettingsSlider<Value extends string>({
+// 行为设置下拉：档位时间说明放进展开菜单的选项里（hint），收起时不再常显
+function SettingsSelect<Value extends string>({
   label,
   value,
   options,
@@ -672,37 +662,13 @@ function SettingsSlider<Value extends string>({
 }: {
   label: string;
   value: Value;
-  options: Array<{ value: Value; label: string; hint: string }>;
+  options: ReadonlyArray<{ value: Value; label: string; hint: string }>;
   onChange: (value: Value) => void;
 }) {
-  const currentIndex = Math.max(0, options.findIndex((option) => option.value === value));
-  const currentOption = options[currentIndex] ?? options[0];
-
   return (
-    <div className="settings-slider-row">
+    <div className="settings-select-row">
       <div className="settings-choice-title">{label}</div>
-      <div className="settings-slider-control">
-        <input
-          type="range"
-          min={0}
-          max={options.length - 1}
-          step={1}
-          value={currentIndex}
-          aria-label={label}
-          aria-valuetext={currentOption.label}
-          onChange={(event) => onChange(options[Number(event.target.value)].value)}
-        />
-        <div className="settings-slider-labels" aria-hidden="true">
-          {options.map((option) => (
-            <span className={option.value === value ? 'active' : ''} key={option.value}>
-              {option.label}
-            </span>
-          ))}
-        </div>
-        <div className="settings-slider-tooltip" role="tooltip">
-          {currentOption.hint}
-        </div>
-      </div>
+      <Dropdown value={value} options={options} onChange={onChange} ariaLabel={label} />
     </div>
   );
 }
@@ -742,15 +708,15 @@ function MoodSelect({
   onChange: (value: (typeof OWNER_MOODS)[number]) => void;
 }) {
   return (
-    <label className="panel-owner-mood-select" aria-label="选择主人心情">
-      <select value={value} onChange={(event) => onChange(event.target.value as (typeof OWNER_MOODS)[number])} aria-label="选择主人心情">
-        {OWNER_MOODS.map((mood) => (
-          <option value={mood} key={mood}>
-            {mood}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="panel-owner-mood-select">
+      <Dropdown
+        value={value}
+        options={OWNER_MOODS.map((mood) => ({ value: mood, label: mood }))}
+        onChange={onChange}
+        ariaLabel="选择主人心情"
+        className="mood"
+      />
+    </div>
   );
 }
 function useBehaviorFrequency() {
@@ -781,6 +747,7 @@ function PanelHomePet() {
   const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION);
   const [actionIndex, setActionIndex] = useState(0);
   const behaviorFrequency = useBehaviorFrequency();
+  const behaviorFrequencyRef = useRef(behaviorFrequency);
   const animationRef = useRef<PetAnimation>(IDLE_ANIMATION);
   const tailHoldTimerRef = useRef<number | null>(null);
 
@@ -810,8 +777,15 @@ function PanelHomePet() {
       }
 
       switchAnimation(IDLE_ANIMATION);
-    }, getRandomTailHoldMs(behaviorFrequency));
+    }, getRandomTailHoldMs(behaviorFrequencyRef.current));
   };
+
+  // 与 PetWindow 同款：频率变化即刻重排等待中的切换，设置立即可感知
+  useEffect(() => {
+    behaviorFrequencyRef.current = behaviorFrequency;
+    if (tailHoldTimerRef.current !== null) handleAnimationEnded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [behaviorFrequency]);
 
   return (
     <div className="panel-home-pet" aria-hidden="true">
@@ -1006,16 +980,15 @@ function SelectProfileField({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="pet-profile-field">
+    <div className="pet-profile-field">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} aria-label={label}>
-        {options.map((option) => (
-          <option value={option} key={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
+      <Dropdown
+        value={value}
+        options={options.map((option) => ({ value: option, label: option }))}
+        onChange={onChange}
+        ariaLabel={label}
+      />
+    </div>
   );
 }
 
@@ -1168,10 +1141,10 @@ function HistoryPage({
   const filteredGroups = orderedGroups.reduce<Record<HistoryConversation['group'], HistoryConversation[]>>((next, group) => {
     const items = groups[group].filter((conversation) => {
       if (!normalizedQuery) return true;
+      // 会话消息已不随列表下发（按需拉取），搜索范围收敛为标题+时间
       return (
         conversation.title.toLowerCase().includes(normalizedQuery) ||
-        conversation.timeLabel.toLowerCase().includes(normalizedQuery) ||
-        conversation.messages.some((message) => message.text.toLowerCase().includes(normalizedQuery))
+        conversation.timeLabel.toLowerCase().includes(normalizedQuery)
       );
     });
     next[group] = items;

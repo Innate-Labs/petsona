@@ -7,6 +7,7 @@ export const TAIL_OVERLAP_MS = 120;
 export const PROACTIVE_BUBBLE_VISIBLE_MS = 5000;
 
 const BEHAVIOR_HOLD_RANGES_MS: Record<PetBehaviorFrequency, [number, number]> = {
+  continuous: [0, 0], // 零间隔：动作播完立即接坐姿、坐姿播完立即接下一动作
   active: [30_000, 45_000],
   normal: [120_000, 150_000],
   quiet: [300_000, 360_000],

@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { Dropdown } from './Dropdown'
 
 type PromptOpts = {
   title: string
@@ -117,11 +118,13 @@ function PromptDialog({ opts, onSubmit }: { opts: PromptOpts; onSubmit: (v: stri
     <ModalScrim onCancel={() => onSubmit(null)}>
       <p className="modal-title">{opts.title}</p>
       {opts.options?.length ? (
-        <select value={value} autoFocus onChange={(e) => setValue(e.target.value)}>
-          {opts.options.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
+        <Dropdown
+          value={value}
+          options={opts.options.map((o) => ({ value: o, label: o }))}
+          onChange={setValue}
+          ariaLabel={opts.title}
+          className="modal"
+        />
       ) : (
         <>
           <input

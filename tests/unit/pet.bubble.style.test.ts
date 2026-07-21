@@ -33,7 +33,9 @@ describe('pet bubble style', () => {
 
   it('renders PET_BUBBLE events through the visible pet route', () => {
     expect(main).toContain('type PetBubblePayload')
-    expect(main).toContain('on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble)')
+    expect(main).toContain('on<PetBubblePayload>(IPC.PET_BUBBLE, (payload) => {')
+    // 任务类气泡由 TaskLight 红绿黄状态灯呈现，不再上头顶文字气泡
+    expect(main).toContain("if (payload.kind === 'task') return;")
     expect(main).toContain('{bubble.text}')
     expect(bubbleComponent).toContain('className={`pet-bubble bubble--${bubble.kind}`}')
   })

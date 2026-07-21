@@ -2,7 +2,7 @@
 // 每轮：PreTurn → [extract→compact] → PreLLM(记忆装配+注入drain) → LLM 流式(含轻工具循环) → PostLLM → 落轮次
 
 import { randomUUID } from 'node:crypto'
-import type { Emotion, LlmContentBlock, LlmMessage, LlmSseToolUse } from '@petsona/shared'
+import type { Emotion, ErrCode, LlmContentBlock, LlmMessage, LlmSseToolUse } from '@petsona/shared'
 import { IPC, TRACK } from '@petsona/shared'
 import type { GatewayClient } from '../gateway/client.js'
 import type { LocalMemoryStore } from '../memory/store.js'
@@ -17,6 +17,20 @@ import { renderMemory } from '../memory/selection.js'
 import { runCompact, estimateChars, COMPACT_THRESHOLD_CHARS, type CompactContext } from '../compact/index.js'
 
 const MAX_TOOL_ROUNDS = 6   // SPEC-GAP: 陪伴循环单轮工具循环上限未定，取 6 防失控
+
+/** 相邻同角色文本消息合并为一条（仅处理 string content；tool 块消息不会出现在组装期） */
+function mergeAdjacentRoles(messages: LlmMessage[]): LlmMessage[] {
+  const out: LlmMessage[] = []
+  for (const m of messages) {
+    const last = out[out.length - 1]
+    if (last && last.role === m.role && typeof last.content === 'string' && typeof m.content === 'string') {
+      last.content = `${last.content}\n\n${m.content}`
+      continue
+    }
+    out.push({ ...m })
+  }
+  return out
+}
 
 export type CompanionDeps = {
   gateway: GatewayClient
@@ -113,6 +127,9 @@ export class CompanionLoop {
         messages.unshift({ role: 'user', content: `${memBlock}\n（以上是你的记忆，自然引用，不要复述原文）` })
         messages.splice(1, 0, { role: 'assistant', content: '（记住了）' })
       }
+      // 相邻同角色合并：错误轮次只落 user 不落 pet、注入/记忆块拼接都会产生连续同角色，
+      // 部分 OpenAI 兼容后端会拒绝或答非所问（CodeWhale enforce pair 的轻量版）
+      messages = mergeAdjacentRoles(messages)
 
       // ---- 系统提示组装（s10 段序） ----
       const seg = buildSegments(this.deps.paths, this.deps.getEmotion(), this.deps.getUserPersona())
@@ -150,42 +167,25 @@ export class CompanionLoop {
   private async streamWithTools(
     turnId: string, conversationId: string, system: string, messages: LlmMessage[], tier: 'main' | 'cheap',
   ): Promise<string | null> {
-    const { gateway, registry, hooks, pool, tracker, emit } = this.deps
+    const { pool, tracker, emit } = this.deps
     const convo = [...messages]
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      let roundText = ''
-      const toolUses: LlmSseToolUse[] = []
-      const state = { stopReason: 'end_turn' as 'end_turn' | 'tool_use', errored: false }
-
-      await gateway.chatStream(
-        {
-          tier, system, messages: convo,
-          tools: registry.toLlmTools(),
-          stream: true, maxTokens: 8000,
-          meta: { loop: 'companion' },
-        },
-        {
-          onDelta: (t) => {
-            roundText += t
-            emit({ type: IPC.CHAT_CHUNK, payload: { turnId, conversationId, delta: t } })
-          },
-          // reasoning 流不进 roundText 也不喂回模型（reasoning 块只用于展示，纯 UI 事件）
-          onReasoning: (t) => {
-            emit({ type: IPC.CHAT_REASONING, payload: { turnId, conversationId, delta: t } })
-          },
-          onToolUse: (tu) => toolUses.push(tu),
-          onDone: (d) => { state.stopReason = d.stopReason },
-          onError: (e) => {
-            state.errored = true
-            tracker.track(TRACK.AI_失败, { code: e.code })
-            tracker.track(TRACK.兜底_触发, { scene: e.code })
-            emit({ type: IPC.CHAT_ERROR, payload: { turnId, conversationId, code: e.code, petLine: pool.forError(e.code) } })
-          },
-        },
-      )
-      if (state.errored) return null
-      if (state.stopReason !== 'tool_use' || toolUses.length === 0) return roundText
+      // 单轮失败先静默重试一次：SSE 断流/网关瞬时抖动是聊天里「出了点问题」的高频来源，
+      // 且此时 dispatch_task 等工具往往已实际执行——立刻报错会造成「报错了任务却又完成了」的割裂。
+      // 重试可能重复少量流式字符，CHAT_DONE 会用最终 reply 整体覆盖，UI 侧自愈。
+      let result = await this.streamRound(turnId, conversationId, system, convo, tier)
+      if (!result.ok) {
+        result = await this.streamRound(turnId, conversationId, system, convo, tier)
+      }
+      if (!result.ok) {
+        tracker.track(TRACK.AI_失败, { code: result.code })
+        tracker.track(TRACK.兜底_触发, { scene: result.code })
+        emit({ type: IPC.CHAT_ERROR, payload: { turnId, conversationId, code: result.code, petLine: pool.forError(result.code) } })
+        return null
+      }
+      const { text: roundText, toolUses, stopReason } = result
+      if (stopReason !== 'tool_use' || toolUses.length === 0) return roundText
 
       // 执行轻工具（PreToolUse 管线 → handler → PostToolUse 管线）
       const assistantBlocks: LlmContentBlock[] = []
@@ -201,6 +201,46 @@ export class CompanionLoop {
     }
     // 工具循环超限：让模型收个尾（不再带 tools）
     return `（工具轮次到顶了）${''}`
+  }
+
+  /** 单轮流式调用：错误只记录不外发（外层决定重试还是报错） */
+  private async streamRound(
+    turnId: string, conversationId: string, system: string, convo: LlmMessage[], tier: 'main' | 'cheap',
+  ): Promise<
+    | { ok: true; text: string; toolUses: LlmSseToolUse[]; stopReason: 'end_turn' | 'tool_use' }
+    | { ok: false; code: ErrCode }
+  > {
+    const { gateway, registry, emit } = this.deps
+    let text = ''
+    const toolUses: LlmSseToolUse[] = []
+    const state = { stopReason: 'end_turn' as 'end_turn' | 'tool_use', errored: false, code: 'UPSTREAM' as ErrCode }
+
+    await gateway.chatStream(
+      {
+        tier, system, messages: convo,
+        tools: registry.toLlmTools(),
+        stream: true, maxTokens: 8000,
+        meta: { loop: 'companion' },
+      },
+      {
+        onDelta: (t) => {
+          text += t
+          emit({ type: IPC.CHAT_CHUNK, payload: { turnId, conversationId, delta: t } })
+        },
+        // reasoning 流不进 text 也不喂回模型（reasoning 块只用于展示，纯 UI 事件）
+        onReasoning: (t) => {
+          emit({ type: IPC.CHAT_REASONING, payload: { turnId, conversationId, delta: t } })
+        },
+        onToolUse: (tu) => toolUses.push(tu),
+        onDone: (d) => { state.stopReason = d.stopReason },
+        onError: (e) => {
+          state.errored = true
+          state.code = e.code
+        },
+      },
+    )
+    if (state.errored) return { ok: false, code: state.code }
+    return { ok: true, text, toolUses, stopReason: state.stopReason }
   }
 
   private async execTool(tu: LlmSseToolUse, conversationId: string): Promise<LlmContentBlock> {

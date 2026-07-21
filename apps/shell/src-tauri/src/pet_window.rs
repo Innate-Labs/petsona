@@ -44,16 +44,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     place_pet_window(app, &win)?;
     watch_pet_window(app, &win);
 
-    // 转 NSPanel：nonactivating + 全空间跟随；不加 FullScreenAuxiliary → 全屏 App 时自动不可见（§4 约束）
+    // 转 NSPanel：nonactivating + 全空间跟随 + FullScreenAuxiliary
+    // （2026-07 需求变更：桌宠在任何 Space、包括全屏 App 的 Space 都要可见，覆盖旧 §4「全屏自动隐身」约束）
     match win.to_panel() {
         Ok(panel) => {
             // RESIZABLE 必须并进 style mask：to_panel 整体覆盖 mask，漏掉就丢边缘拖拽
             panel.set_style_mask(NONACTIVATING_PANEL | RESIZABLE);
             panel.set_level(PANEL_LEVEL);
-            panel.set_collection_behaviour(
-                NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-                    | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle,
-            );
+            panel.set_collection_behaviour(all_spaces_behaviour());
             panel.set_hides_on_deactivate(false);
             panel.set_becomes_key_only_if_needed(true);
             panel.show();
@@ -64,6 +62,13 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         }
     }
     Ok(())
+}
+
+/// 宠物窗与聊天浮窗共用的空间行为：所有桌面可见 + 可叠在全屏 App 上 + 不进 ⌘` 循环
+pub(crate) fn all_spaces_behaviour() -> NSWindowCollectionBehavior {
+    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+        | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+        | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle
 }
 
 /// 托盘「开关桌宠」
@@ -117,6 +122,8 @@ fn watch_pet_window(app: &AppHandle, win: &tauri::WebviewWindow) {
                     PetWindowState { x: pos.x, y: pos.y, w: Some(size.width), h: Some(size.height) },
                 );
             }
+            // 聊天浮窗跟随宠物：拖宠物时浮窗贴着走（用户要求浮窗永远在宠物旁）
+            crate::follow_pet_with_float(&app);
         }
     });
 }

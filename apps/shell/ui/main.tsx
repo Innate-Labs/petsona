@@ -9,6 +9,7 @@ import { PetVideoLayer } from './PetVideoLayer';
 import { installPetAgentBridge } from './petAgentBridge';
 import { DRAG_ANIMATION, IDLE_ANIMATION, PET_ACTION_SEQUENCE, type PetAnimation } from './petAnimations';
 import { getNextActionIndex, getRandomTailHoldMs, PROACTIVE_BUBBLE_VISIBLE_MS } from './petAnimationScheduler';
+import { TaskLight, useTaskLight } from './pet/TaskLight';
 import { on, request } from './lib/ipc';
 import './styles.css';
 
@@ -46,9 +47,12 @@ function isTauriRuntime() {
 
 function PetView() {
   const [bubble, setBubble] = useState<PetBubblePayload | null>(null);
+  const taskLight = useTaskLight();
   const [animation, setAnimation] = useState<PetAnimation>(IDLE_ANIMATION);
   const [actionIndex, setActionIndex] = useState(0);
   const [behaviorFrequency, setBehaviorFrequency] = useState<PetBehaviorFrequency>(DEFAULT_CONFIG.pet.behaviorFrequency);
+  // ref 镜像：timer 回调读它拿最新频率，避免 setTimeout 闭包锁旧值
+  const behaviorFrequencyRef = React.useRef<PetBehaviorFrequency>(behaviorFrequency);
   const animationRef = React.useRef<PetAnimation>(IDLE_ANIMATION);
   const tailHoldTimerRef = React.useRef<number | null>(null);
   const pendingPetPressRef = React.useRef<{
@@ -109,7 +113,12 @@ function PetView() {
     const unsubscribe = on<{ config: Config }>(IPC.CONFIG_UPDATED, ({ config }) => {
       setBehaviorFrequency(config.pet?.behaviorFrequency ?? DEFAULT_CONFIG.pet.behaviorFrequency);
     });
-    const unsubscribeBubble = on<PetBubblePayload>(IPC.PET_BUBBLE, setBubble);
+    // 任务类气泡不再上头顶：派发「去干活啦」/完成「任务完成：…」的文字气泡会把红绿黄状态灯
+    // 全程盖住（气泡优先级高于灯）；任务生命周期统一由 TaskLight 呈现，完整反馈仍在聊天流里
+    const unsubscribeBubble = on<PetBubblePayload>(IPC.PET_BUBBLE, (payload) => {
+      if (payload.kind === 'task') return;
+      setBubble(payload);
+    });
 
     return () => {
       alive = false;
@@ -161,8 +170,16 @@ function PetView() {
       }
 
       switchAnimation(IDLE_ANIMATION);
-    }, getRandomTailHoldMs(behaviorFrequency));
+    }, getRandomTailHoldMs(behaviorFrequencyRef.current));
   };
+
+  // 频率改变时立即重排等待中的动作切换：否则旧档 timer（quiet 档最长 6 分钟）继续走完，
+  // 用户改完「行为变化」盯着宠物看不到任何反应，会以为设置没生效
+  useEffect(() => {
+    behaviorFrequencyRef.current = behaviorFrequency;
+    if (tailHoldTimerRef.current !== null) handleAnimationEnded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [behaviorFrequency]);
 
   const beginPetPickUp = () => {
     const pendingPress = pendingPetPressRef.current;
@@ -219,6 +236,9 @@ function PetView() {
         <button className="pet-bubble" data-no-drag="true" onClick={openChat} type="button">
           {bubble.text}
         </button>
+      ) : taskLight ? (
+        // 聊天气泡优先（任务完成的反馈气泡正好接棒状态灯）；无气泡时头顶亮任务状态灯
+        <TaskLight state={taskLight} />
       ) : null}
       <PetVideoLayer activeAnimation={animation} onEnded={handleAnimationEnded} />
       <div
